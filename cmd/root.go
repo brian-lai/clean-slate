@@ -71,7 +71,21 @@ func ResetOutput() {
 	cleanArchive = false
 }
 
-// outputJSON writes v as indented JSON to the command's output writer.
+// --- JSON output contract ---
+//
+// Commands that support --json MUST adhere to the following contract:
+//   1. On success: indented JSON on stdout via outputJSON; stderr empty.
+//   2. On error: JSON error object {"error": "..."} on stderr via outputError;
+//      stdout empty.
+//   3. Warnings must appear inside the success JSON payload (typically under
+//      a "warnings" field), NOT as plain text on stderr.
+//   4. Empty collections must serialize as [] not null (initialize slices
+//      before marshaling).
+//
+// Tests in cmd/json_test.go enforce these invariants across all commands.
+
+// outputJSON writes v as indented JSON to the command's stdout writer.
+// Used for success payloads in --json mode.
 func outputJSON(cmd *cobra.Command, v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -81,7 +95,8 @@ func outputJSON(cmd *cobra.Command, v any) error {
 	return nil
 }
 
-// outputError writes a JSON error object when in JSON mode, otherwise plain text.
+// outputError writes the error to the command's stderr writer.
+// In JSON mode: a JSON {"error": "..."} object. Otherwise: plain "Error: ...".
 func outputError(cmd *cobra.Command, useJSON bool, err error) {
 	if useJSON {
 		data, _ := json.Marshal(map[string]string{"error": err.Error()})
