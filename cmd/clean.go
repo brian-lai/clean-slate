@@ -113,9 +113,9 @@ func runClean(cmd *cobra.Command, args []string) error {
 
 	if useJSON {
 		result := map[string]any{
-			"task":      taskName,
-			"archived":  cleanArchive,
-			"warnings":  warnings,
+			"task":     taskName,
+			"archived": cleanArchive,
+			"warnings": warnings,
 		}
 		if warnings == nil {
 			result["warnings"] = []string{}

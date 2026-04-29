@@ -20,7 +20,7 @@ func Launch(dir string) (fallback string, err error) {
 }
 
 // ITermScript returns AppleScript that opens a new iTerm2 tab cd'd into dir.
-// The path is single-quote-escaped using the POSIX '\'' idiom so that paths
+// The path is single-quote-escaped using the POSIX '\” idiom so that paths
 // containing single quotes don't break the shell command iTerm runs.
 func ITermScript(dir string) string {
 	safe := escapeSingleQuotes(dir)
@@ -49,7 +49,7 @@ func Fallback(dir string) string {
 	return fmt.Sprintf("cd %s", dir)
 }
 
-// escapeSingleQuotes replaces ' with '\'' so that the resulting string can be
+// escapeSingleQuotes replaces ' with '\” so that the resulting string can be
 // safely placed inside single quotes in a POSIX shell command.
 func escapeSingleQuotes(s string) string {
 	return strings.ReplaceAll(s, `'`, `'\''`)
