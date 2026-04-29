@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/blai/clean-slate/internal/manifest"
+	"github.com/brian-lai/clean-slate/internal/manifest"
 )
 
 // ErrTaskExists is returned when attempting to create a task whose directory already exists.

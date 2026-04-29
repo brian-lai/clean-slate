@@ -1,6 +1,6 @@
 package main
 
-import "github.com/blai/clean-slate/cmd"
+import "github.com/brian-lai/clean-slate/cmd"
 
 func main() {
 	cmd.Execute()

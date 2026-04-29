@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/blai/clean-slate/internal/manifest"
+	"github.com/brian-lai/clean-slate/internal/manifest"
 )
 
 func TestTaskRoundTrip(t *testing.T) {

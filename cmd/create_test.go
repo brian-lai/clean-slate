@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/blai/clean-slate/cmd"
-	"github.com/blai/clean-slate/internal/manifest"
+	"github.com/brian-lai/clean-slate/cmd"
+	"github.com/brian-lai/clean-slate/internal/manifest"
 )
 
 // initTestRepo creates a minimal git repo with an initial commit.

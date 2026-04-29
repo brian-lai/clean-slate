@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/blai/clean-slate/internal/version"
+	"github.com/brian-lai/clean-slate/internal/version"
 	"github.com/spf13/cobra"
 )
 
