@@ -9,8 +9,8 @@ import (
 
 // TestJSONOutputConsistency exercises --json on every command that supports it
 // and asserts:
-//   1. stdout is valid JSON
-//   2. stderr is empty on success (no leaking plain-text output)
+//  1. stdout is valid JSON
+//  2. stderr is empty on success (no leaking plain-text output)
 //
 // This locks down the agent-facing contract.
 func TestJSONOutputConsistency(t *testing.T) {
@@ -115,4 +115,3 @@ func TestJSONNoStdoutLeaks(t *testing.T) {
 		t.Errorf("warnings should be an array, got %T", warns)
 	}
 }
-
