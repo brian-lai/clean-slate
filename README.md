@@ -14,6 +14,13 @@ brew install brian-lai/tap/clean-slate
 
 > **Note:** macOS + Linux are supported. On Linux, `cs open` prints a `cd` command you can copy-paste — it can't launch a terminal the way iTerm2/Terminal.app do on macOS.
 
+To upgrade to a new version:
+
+```sh
+brew update
+brew upgrade clean-slate
+```
+
 ### From source
 
 ```sh
