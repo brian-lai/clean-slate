@@ -2,9 +2,10 @@ VERSION ?= dev
 LDFLAGS := -X github.com/blai/clean-slate/internal/version.Version=$(VERSION)
 BIN := bin/cs
 
-# Install location: $GOBIN if set, else $GOPATH/bin, else $HOME/go/bin.
-# `go install` picks this automatically, but we need it explicitly to rename
-# the binary (module is "clean-slate", binary should be "cs").
+# Install location: $GOBIN if set, else $(go env GOPATH)/bin.
+# (go env GOPATH itself falls back to $HOME/go when unset.)
+# `go install` picks this automatically, but we resolve it explicitly so we
+# can rename the binary at install time (module is "clean-slate", binary is "cs").
 INSTALL_DIR := $(shell go env GOBIN)
 ifeq ($(INSTALL_DIR),)
 INSTALL_DIR := $(shell go env GOPATH)/bin
