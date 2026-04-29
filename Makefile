@@ -2,7 +2,15 @@ VERSION ?= dev
 LDFLAGS := -X github.com/blai/clean-slate/internal/version.Version=$(VERSION)
 BIN := bin/cs
 
-.PHONY: all build test install clean completions vet fmt lint check help
+# Install location: $GOBIN if set, else $GOPATH/bin, else $HOME/go/bin.
+# `go install` picks this automatically, but we need it explicitly to rename
+# the binary (module is "clean-slate", binary should be "cs").
+INSTALL_DIR := $(shell go env GOBIN)
+ifeq ($(INSTALL_DIR),)
+INSTALL_DIR := $(shell go env GOPATH)/bin
+endif
+
+.PHONY: all build test install clean completions vet fmt check help
 
 all: build
 
@@ -15,9 +23,12 @@ build:
 test:
 	go test ./...
 
-## Install cs to $GOPATH/bin (or $GOBIN)
-install:
-	go install -ldflags "$(LDFLAGS)" .
+## Install cs as 'cs' into $GOBIN (or $GOPATH/bin).
+## go install would name it after the module (clean-slate), so we build + install explicitly.
+install: build
+	@mkdir -p $(INSTALL_DIR)
+	install -m 0755 $(BIN) $(INSTALL_DIR)/cs
+	@echo "Installed cs to $(INSTALL_DIR)/cs"
 
 ## Remove build artifacts
 clean:
