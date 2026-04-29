@@ -9,7 +9,9 @@ import (
 	"github.com/blai/clean-slate/internal/config"
 	"github.com/blai/clean-slate/internal/git"
 	"github.com/blai/clean-slate/internal/manifest"
+	"github.com/blai/clean-slate/internal/tui"
 	"github.com/blai/clean-slate/internal/workspace"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -20,9 +22,10 @@ type createResult struct {
 }
 
 var createCmd = &cobra.Command{
-	Use:   "create <name>",
+	Use:   "create [name]",
 	Short: "Create a new task workspace",
-	Args:  cobra.ExactArgs(1),
+	Long:  `Create a new task workspace. If name and --description are not provided and stdin is a terminal, runs interactive prompts.`,
+	Args:  cobra.MaximumNArgs(1),
 	RunE:  runCreate,
 }
 
@@ -44,10 +47,44 @@ func init() {
 func runCreate(cmd *cobra.Command, args []string) error {
 	useJSON, _ := cmd.Root().PersistentFlags().GetBool("json")
 
-	taskName := args[0]
+	// Collect inputs from args + flags
+	inputs := tui.CreateInputs{
+		Description: createDesc,
+		JiraTicket:  createJira,
+		Repos:       createRepos,
+		ContextDocs: createContextDoc,
+	}
+	if len(args) > 0 {
+		inputs.Name = args[0]
+	}
+
+	// If required fields are missing, decide whether to prompt interactively or error out.
+	needed := tui.NeedsPrompt(inputs)
+	if len(needed) > 0 {
+		if useJSON || !isatty.IsTerminal(os.Stdin.Fd()) {
+			// Headless/piped mode: cannot prompt, must error.
+			err := fmt.Errorf("missing required input(s): %v (provide via flags or run in a TTY for interactive prompts)", needed)
+			outputError(cmd, useJSON, err)
+			return err
+		}
+
+		cfg := config.Load()
+		repoNames, _ := git.ListRepos(cfg.ReposDir) // error is non-fatal; empty list is fine
+		filled, err := tui.PromptCreate(repoNames, inputs)
+		if err != nil {
+			outputError(cmd, useJSON, err)
+			return err
+		}
+		inputs = filled
+	}
+
+	taskName := inputs.Name
+	createDesc = inputs.Description
+	createJira = inputs.JiraTicket
+	createRepos = inputs.Repos
+	createContextDoc = inputs.ContextDocs
 
 	// Pre-validate inputs that can be checked without side effects.
-	// Fail fast before any directory creation or worktree operations.
 	if err := manifest.ValidateName(taskName); err != nil {
 		outputError(cmd, useJSON, err)
 		return err

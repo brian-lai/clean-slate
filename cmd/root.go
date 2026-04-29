@@ -59,6 +59,14 @@ func ResetOutput() {
 	createCmd.Flags().Set("context-doc", "") //nolint
 	createRepos = nil
 	createContextDoc = nil
+	// Reset status flags
+	statusCmd.Flags().Set("verbose", "false") //nolint
+	statusVerbose = false
+	// Reset clean flags
+	cleanCmd.Flags().Set("force", "false")   //nolint
+	cleanCmd.Flags().Set("archive", "false") //nolint
+	cleanForce = false
+	cleanArchive = false
 }
 
 // outputJSON writes v as indented JSON to the command's output writer.
