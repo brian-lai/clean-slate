@@ -2,23 +2,23 @@ VERSION ?= dev
 LDFLAGS := -X github.com/blai/clean-slate/internal/version.Version=$(VERSION)
 BIN := bin/cs
 
-# Install location resolution order (first match wins):
-#   1. $(PREFIX)/bin      — if PREFIX is set (standard Unix override, e.g. PREFIX=/usr/local)
-#   2. ~/.local/bin       — if it exists (XDG user-local convention, usually on PATH)
-#   3. $(go env GOBIN)    — if set
-#   4. $(go env GOPATH)/bin — Go toolchain default
+# Install location resolution order (first match wins, explicit intent beats heuristics):
+#   1. $(PREFIX)/bin         — standard Unix override (e.g. PREFIX=/usr/local)
+#   2. $(go env GOBIN)       — explicit Go-toolchain install dir
+#   3. ~/.local/bin          — XDG user-local default (created via mkdir -p if missing)
+#   4. $(go env GOPATH)/bin  — Go-toolchain fallback
 #
 # We resolve this explicitly (rather than using `go install`) so we can rename
 # the binary at install time: the module is "clean-slate" but the binary is "cs".
+GOBIN := $(shell go env GOBIN)
 ifdef PREFIX
 INSTALL_DIR := $(PREFIX)/bin
+else ifneq ($(GOBIN),)
+INSTALL_DIR := $(GOBIN)
 else ifneq ($(wildcard $(HOME)/.local/bin),)
 INSTALL_DIR := $(HOME)/.local/bin
 else
-INSTALL_DIR := $(shell go env GOBIN)
-ifeq ($(INSTALL_DIR),)
 INSTALL_DIR := $(shell go env GOPATH)/bin
-endif
 endif
 
 .PHONY: all build test install clean completions vet fmt check help
