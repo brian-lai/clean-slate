@@ -91,13 +91,13 @@ func TestValidateMissingName(t *testing.T) {
 func TestValidateMissingDescription(t *testing.T) {
 	task := manifest.Task{Name: "valid-name"}
 	err := manifest.Validate(task)
-	if err == nil {
-		t.Error("Validate missing description: expected error, got nil")
+	if !errors.Is(err, manifest.ErrDescriptionRequired) {
+		t.Errorf("Validate missing description = %v, want ErrDescriptionRequired", err)
 	}
 }
 
 func TestValidateInvalidTaskNameChars(t *testing.T) {
-	invalid := []string{"my task", "feat:thing", "a..b", "a~b", "a^b", "a:b", "a b"}
+	invalid := []string{"my task", "feat:thing", "a..b", "a~b", "a^b", "a:b", "a b", "-leading-dash", ".leading-dot"}
 	for _, name := range invalid {
 		task := manifest.Task{Name: name, Description: "desc"}
 		err := manifest.Validate(task)
@@ -125,8 +125,22 @@ func TestValidateEmptyRepoName(t *testing.T) {
 		},
 	}
 	err := manifest.Validate(task)
-	if err == nil {
-		t.Error("Validate empty repo name: expected error, got nil")
+	if !errors.Is(err, manifest.ErrRepoNameRequired) {
+		t.Errorf("Validate empty repo name = %v, want ErrRepoNameRequired", err)
+	}
+}
+
+func TestValidateEmptyRepoSource(t *testing.T) {
+	task := manifest.Task{
+		Name:        "valid",
+		Description: "desc",
+		Repos: []manifest.RepoRef{
+			{Name: "rna", Source: ""},
+		},
+	}
+	err := manifest.Validate(task)
+	if !errors.Is(err, manifest.ErrRepoSourceRequired) {
+		t.Errorf("Validate empty repo source = %v, want ErrRepoSourceRequired", err)
 	}
 }
 

@@ -65,12 +65,15 @@ func TestCreateOrchestrationEndToEnd(t *testing.T) {
 	contextPaths := []string{contextDoc}
 
 	// Step 1: Create workspace directory
-	taskDir, warnings, err := workspace.Create(cfg.TasksDir, taskName, contextPaths)
+	taskDir, copiedDocs, warnings, err := workspace.Create(cfg.TasksDir, taskName, contextPaths)
 	if err != nil {
 		t.Fatalf("workspace.Create: %v", err)
 	}
 	if len(warnings) > 0 {
 		t.Errorf("unexpected warnings: %v", warnings)
+	}
+	if len(copiedDocs) != 1 || copiedDocs[0] != "context/notes.txt" {
+		t.Errorf("copiedDocs = %v, want [context/notes.txt]", copiedDocs)
 	}
 
 	// Step 2: Add worktrees for each repo
@@ -94,13 +97,13 @@ func TestCreateOrchestrationEndToEnd(t *testing.T) {
 		})
 	}
 
-	// Step 3: Write manifest
+	// Step 3: Write manifest (use copiedDocs from workspace.Create, not hardcoded)
 	task := manifest.Task{
 		Name:        taskName,
 		CreatedAt:   time.Now().UTC(),
 		Description: "Integration test task",
 		Repos:       repos,
-		ContextDocs: []string{"context/notes.txt"}, // relative path
+		ContextDocs: copiedDocs,
 	}
 	if err := manifest.Validate(task); err != nil {
 		t.Fatalf("manifest.Validate: %v", err)

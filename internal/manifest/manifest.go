@@ -11,14 +11,24 @@ import (
 )
 
 var (
-	ErrTaskExists            = errors.New("task already exists")
-	ErrWorktreeBranchExists  = errors.New("worktree branch already exists")
-	ErrNoDefaultBranch       = errors.New("could not detect default branch")
-	ErrInvalidTaskName       = errors.New("invalid task name")
+	ErrInvalidTaskName     = errors.New("invalid task name")
+	ErrDescriptionRequired = errors.New("description is required")
+	ErrRepoNameRequired    = errors.New("repo name is required")
+	ErrRepoSourceRequired  = errors.New("repo source is required")
 )
 
-var validTaskName = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+var validTaskName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 var invalidTaskNamePatterns = regexp.MustCompile(`\.\.`)
+
+// ValidateName checks that a task name is syntactically valid.
+// Rules: must match [a-zA-Z0-9][a-zA-Z0-9._-]*, no ".." sequence.
+// Exposed so other packages (workspace) can validate without duplicating the regex.
+func ValidateName(name string) error {
+	if name == "" || !validTaskName.MatchString(name) || invalidTaskNamePatterns.MatchString(name) {
+		return fmt.Errorf("%w: %q (must start with alphanumeric, match [a-zA-Z0-9._-]+, no ..)", ErrInvalidTaskName, name)
+	}
+	return nil
+}
 
 type Task struct {
 	Name        string    `json:"name"`
@@ -58,18 +68,18 @@ func Read(dir string) (Task, error) {
 }
 
 func Validate(task Task) error {
-	if task.Name == "" || !validTaskName.MatchString(task.Name) || invalidTaskNamePatterns.MatchString(task.Name) {
-		return fmt.Errorf("%w: %q (must match [a-zA-Z0-9._-]+, no ..)", ErrInvalidTaskName, task.Name)
+	if err := ValidateName(task.Name); err != nil {
+		return err
 	}
 	if task.Description == "" {
-		return errors.New("description is required")
+		return ErrDescriptionRequired
 	}
 	for i, repo := range task.Repos {
 		if repo.Name == "" {
-			return fmt.Errorf("repo[%d].name is empty", i)
+			return fmt.Errorf("repo[%d]: %w", i, ErrRepoNameRequired)
 		}
 		if repo.Source == "" {
-			return fmt.Errorf("repo[%d].source is empty", i)
+			return fmt.Errorf("repo[%d]: %w", i, ErrRepoSourceRequired)
 		}
 	}
 	return nil

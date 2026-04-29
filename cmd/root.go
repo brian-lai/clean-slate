@@ -14,9 +14,9 @@ var outWriter io.Writer = os.Stdout
 var errWriter io.Writer = os.Stderr
 
 var rootCmd = &cobra.Command{
-	Use:   "cs",
-	Short: "Clean Slate — task workspace manager",
-	Long:  `cs creates and manages isolated task workspaces under ~/projects/tasks/.`,
+	Use:          "cs",
+	Short:        "Clean Slate — task workspace manager",
+	Long:         `cs creates and manages isolated task workspaces under ~/projects/tasks/.`,
 	SilenceUsage: true,
 }
 
@@ -52,10 +52,10 @@ func ResetOutput() {
 	// Reset persistent flags
 	rootCmd.PersistentFlags().Set("json", "false") //nolint
 	// Reset create command flags
-	createCmd.Flags().Set("jira", "")           //nolint
-	createCmd.Flags().Set("description", "")    //nolint
-	createCmd.Flags().Set("repo", "")           //nolint (reset slice)
-	createCmd.Flags().Set("context-doc", "")    //nolint
+	createCmd.Flags().Set("jira", "")        //nolint
+	createCmd.Flags().Set("description", "") //nolint
+	createCmd.Flags().Set("repo", "")        //nolint (reset slice)
+	createCmd.Flags().Set("context-doc", "") //nolint
 	createRepos = nil
 	createContextDoc = nil
 }

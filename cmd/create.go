@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -13,9 +14,9 @@ import (
 )
 
 type createResult struct {
-	manifest.Task
-	TaskDir  string   `json:"task_dir"`
-	Warnings []string `json:"warnings,omitempty"`
+	Task     manifest.Task `json:"task"`
+	TaskDir  string        `json:"task_dir"`
+	Warnings []string      `json:"warnings"`
 }
 
 var createCmd = &cobra.Command{
@@ -44,23 +45,39 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	useJSON, _ := cmd.Root().PersistentFlags().GetBool("json")
 
 	taskName := args[0]
+
+	// Pre-validate inputs that can be checked without side effects.
+	// Fail fast before any directory creation or worktree operations.
+	if err := manifest.ValidateName(taskName); err != nil {
+		outputError(cmd, useJSON, err)
+		return err
+	}
 	if createDesc == "" {
-		err := fmt.Errorf("--description is required")
+		err := manifest.ErrDescriptionRequired
 		outputError(cmd, useJSON, err)
 		return err
 	}
 
 	cfg := config.Load()
 
-	// Create workspace directory
-	taskDir, warnings, err := workspace.Create(cfg.TasksDir, taskName, createContextDoc)
+	// Create workspace directory and copy context docs.
+	// copiedDocs is the list of docs that actually landed on disk (relative paths).
+	taskDir, copiedDocs, warnings, err := workspace.Create(cfg.TasksDir, taskName, createContextDoc)
 	if err != nil {
 		outputError(cmd, useJSON, err)
 		return err
 	}
 
-	// Add worktrees for each requested repo
-	var repos []manifest.RepoRef
+	// Track created worktrees so we can roll back on failure.
+	var addedWorktrees []string
+	rollback := func() {
+		for _, wt := range addedWorktrees {
+			_ = git.RemoveWorktree(wt)
+		}
+		_ = os.RemoveAll(taskDir)
+	}
+
+	repos := []manifest.RepoRef{}
 	for _, repoName := range createRepos {
 		repoPath := filepath.Join(cfg.ReposDir, repoName)
 		worktreeDest := filepath.Join(taskDir, repoName)
@@ -71,6 +88,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 			warnings = append(warnings, fmt.Sprintf("skip repo %s: %v", repoName, wtErr))
 			continue
 		}
+		addedWorktrees = append(addedWorktrees, worktreeDest)
 
 		repos = append(repos, manifest.RepoRef{
 			Name:           repoName,
@@ -81,31 +99,32 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	// Build context doc relative paths
-	var contextDocs []string
-	for _, doc := range createContextDoc {
-		rel := filepath.Join("context", filepath.Base(doc))
-		contextDocs = append(contextDocs, rel)
+	// Build final manifest using only docs that were actually copied.
+	if copiedDocs == nil {
+		copiedDocs = []string{}
 	}
-
-	// Write manifest
 	task := manifest.Task{
 		Name:        taskName,
 		CreatedAt:   time.Now().UTC(),
 		JiraTicket:  createJira,
 		Description: createDesc,
 		Repos:       repos,
-		ContextDocs: contextDocs,
+		ContextDocs: copiedDocs,
 	}
 	if err := manifest.Validate(task); err != nil {
+		rollback()
 		outputError(cmd, useJSON, err)
 		return err
 	}
 	if err := manifest.Write(task, taskDir); err != nil {
+		rollback()
 		outputError(cmd, useJSON, err)
 		return err
 	}
 
+	if warnings == nil {
+		warnings = []string{}
+	}
 	result := createResult{Task: task, TaskDir: taskDir, Warnings: warnings}
 
 	if useJSON {
