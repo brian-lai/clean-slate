@@ -54,6 +54,11 @@ func init() {
 		cfg := config.Load()
 		entries, err := os.ReadDir(cfg.TasksDir)
 		if err != nil {
+			// Missing tasks dir → no completions, but don't report an error
+			// to the shell (that surfaces as an ugly "completion error").
+			if os.IsNotExist(err) {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
 			return nil, cobra.ShellCompDirectiveError
 		}
 		var names []string
