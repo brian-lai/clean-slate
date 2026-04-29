@@ -2,13 +2,23 @@ VERSION ?= dev
 LDFLAGS := -X github.com/blai/clean-slate/internal/version.Version=$(VERSION)
 BIN := bin/cs
 
-# Install location: $GOBIN if set, else $(go env GOPATH)/bin.
-# (go env GOPATH itself falls back to $HOME/go when unset.)
-# `go install` picks this automatically, but we resolve it explicitly so we
-# can rename the binary at install time (module is "clean-slate", binary is "cs").
+# Install location resolution order (first match wins):
+#   1. $(PREFIX)/bin      — if PREFIX is set (standard Unix override, e.g. PREFIX=/usr/local)
+#   2. ~/.local/bin       — if it exists (XDG user-local convention, usually on PATH)
+#   3. $(go env GOBIN)    — if set
+#   4. $(go env GOPATH)/bin — Go toolchain default
+#
+# We resolve this explicitly (rather than using `go install`) so we can rename
+# the binary at install time: the module is "clean-slate" but the binary is "cs".
+ifdef PREFIX
+INSTALL_DIR := $(PREFIX)/bin
+else ifneq ($(wildcard $(HOME)/.local/bin),)
+INSTALL_DIR := $(HOME)/.local/bin
+else
 INSTALL_DIR := $(shell go env GOBIN)
 ifeq ($(INSTALL_DIR),)
 INSTALL_DIR := $(shell go env GOPATH)/bin
+endif
 endif
 
 .PHONY: all build test install clean completions vet fmt check help
@@ -24,12 +34,12 @@ build:
 test:
 	go test ./...
 
-## Install cs as 'cs' into $GOBIN (or $GOPATH/bin).
-## go install would name it after the module (clean-slate), so we build + install explicitly.
+## Install cs into $(INSTALL_DIR) (defaults to ~/.local/bin; override with PREFIX=...).
 install: build
 	@mkdir -p $(INSTALL_DIR)
 	install -m 0755 $(BIN) $(INSTALL_DIR)/cs
 	@echo "Installed cs to $(INSTALL_DIR)/cs"
+	@case ":$$PATH:" in *":$(INSTALL_DIR):"*) ;; *) echo "Warning: $(INSTALL_DIR) is not on \$$PATH. Add it to your shell profile to run 'cs' directly." ;; esac
 
 ## Remove build artifacts
 clean:
