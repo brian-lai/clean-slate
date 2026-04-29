@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/blai/clean-slate/internal/config"
-	"github.com/blai/clean-slate/internal/terminal"
+	"github.com/brian-lai/clean-slate/internal/config"
+	"github.com/brian-lai/clean-slate/internal/terminal"
 	"github.com/spf13/cobra"
 )
 

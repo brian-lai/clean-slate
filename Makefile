@@ -1,5 +1,5 @@
 VERSION ?= dev
-LDFLAGS := -X github.com/blai/clean-slate/internal/version.Version=$(VERSION)
+LDFLAGS := -X github.com/brian-lai/clean-slate/internal/version.Version=$(VERSION)
 BIN := bin/cs
 
 # Install location resolution order (first match wins, explicit intent beats heuristics):

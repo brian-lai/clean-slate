@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/blai/clean-slate/internal/git"
+	"github.com/brian-lai/clean-slate/internal/git"
 )
 
 // initRepo creates a temp git repo with an initial commit on the given branch.
