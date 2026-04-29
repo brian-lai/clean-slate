@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/blai/clean-slate/internal/config"
-	"github.com/blai/clean-slate/internal/git"
-	"github.com/blai/clean-slate/internal/manifest"
-	"github.com/blai/clean-slate/internal/tui"
-	"github.com/blai/clean-slate/internal/workspace"
+	"github.com/brian-lai/clean-slate/internal/config"
+	"github.com/brian-lai/clean-slate/internal/git"
+	"github.com/brian-lai/clean-slate/internal/manifest"
+	"github.com/brian-lai/clean-slate/internal/tui"
+	"github.com/brian-lai/clean-slate/internal/workspace"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )

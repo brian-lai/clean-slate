@@ -3,7 +3,7 @@ package version_test
 import (
 	"testing"
 
-	"github.com/blai/clean-slate/internal/version"
+	"github.com/brian-lai/clean-slate/internal/version"
 )
 
 func TestVersionDefault(t *testing.T) {

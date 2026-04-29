@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/blai/clean-slate/internal/terminal"
+	"github.com/brian-lai/clean-slate/internal/terminal"
 )
 
 // Templates are argv-based, so the path should NOT appear in the script source.

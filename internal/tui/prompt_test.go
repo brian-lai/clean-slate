@@ -3,7 +3,7 @@ package tui_test
 import (
 	"testing"
 
-	"github.com/blai/clean-slate/internal/tui"
+	"github.com/brian-lai/clean-slate/internal/tui"
 )
 
 func TestNeedsPromptAllFilled(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/blai/clean-slate/internal/config"
+	"github.com/brian-lai/clean-slate/internal/config"
 )
 
 func TestDefaultPaths(t *testing.T) {
