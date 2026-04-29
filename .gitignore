@@ -1,2 +1,6 @@
 .para-worktrees/
 !context/
+bin/
+completions/
+*.test
+*.out
