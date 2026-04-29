@@ -1,0 +1,57 @@
+name: Release
+
+# Matches strict semver tags (vMAJOR.MINOR.PATCH) only.
+# GitHub Actions uses glob filter patterns (not regex): + is "one or more",
+# [0-9] is a digit class. Pre-release suffixes (v1.0.0-rc1), extra segments
+# (v1.0.0.1), and non-digit characters will NOT match this pattern.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  release:
+    name: Create GitHub release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required for gh release create
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need full history for auto-generated release notes
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --verify-tag
+
+  update-tap:
+    name: Bump Homebrew tap formula
+    runs-on: ubuntu-latest
+    needs: release
+    permissions: {}  # uses TAP_REPO_TOKEN PAT for tap repo writes; no GITHUB_TOKEN access needed
+    steps:
+      - uses: actions/checkout@v4
+
+      # Give GitHub a moment to finish publishing the release tarball before
+      # the action tries to compute its sha256. The release job exits before
+      # this one starts, but the tarball endpoint is eventually-consistent.
+      - name: Wait for release tarball to be available
+        run: sleep 20
+
+      # Pinned to v4 SHA (tag: v4) for supply-chain safety — third-party
+      # action writes to the tap repo via PAT, so a hijacked maintainer tag
+      # could exfiltrate the token. Rotate SHA when updating the action.
+      - name: Bump formula in brian-lai/homebrew-tap
+        uses: dawidd6/action-homebrew-bump-formula@8d494330bce4434918392df134ad3db1167904db  # v4
+        with:
+          token: ${{ secrets.TAP_REPO_TOKEN }}
+          tap: brian-lai/homebrew-tap
+          formula: clean-slate
+          tag: ${{ github.ref_name }}
+          force: false
+          no_fork: true
