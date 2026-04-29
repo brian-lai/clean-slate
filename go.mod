@@ -1,4 +1,4 @@
-module github.com/blai/clean-slate
+module github.com/brian-lai/clean-slate
 
 go 1.26.2
 

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/blai/clean-slate/internal/manifest"
-	"github.com/blai/clean-slate/internal/workspace"
+	"github.com/brian-lai/clean-slate/internal/manifest"
+	"github.com/brian-lai/clean-slate/internal/workspace"
 )
 
 func TestCreateTaskDir(t *testing.T) {

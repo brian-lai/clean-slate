@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/blai/clean-slate/cmd"
-	"github.com/blai/clean-slate/internal/manifest"
+	"github.com/brian-lai/clean-slate/cmd"
+	"github.com/brian-lai/clean-slate/internal/manifest"
 )
 
 // writeManifest drops a task.json into tasksDir/<name>/ for list-test fixtures.

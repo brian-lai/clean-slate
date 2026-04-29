@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/blai/clean-slate/internal/config"
-	"github.com/blai/clean-slate/internal/git"
-	"github.com/blai/clean-slate/internal/manifest"
-	"github.com/blai/clean-slate/internal/workspace"
+	"github.com/brian-lai/clean-slate/internal/config"
+	"github.com/brian-lai/clean-slate/internal/git"
+	"github.com/brian-lai/clean-slate/internal/manifest"
+	"github.com/brian-lai/clean-slate/internal/workspace"
 )
 
 // initTestRepo creates a git repo with an initial commit at reposDir/name.

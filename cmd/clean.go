@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/blai/clean-slate/internal/config"
-	"github.com/blai/clean-slate/internal/git"
-	"github.com/blai/clean-slate/internal/manifest"
+	"github.com/brian-lai/clean-slate/internal/config"
+	"github.com/brian-lai/clean-slate/internal/git"
+	"github.com/brian-lai/clean-slate/internal/manifest"
 	"github.com/charmbracelet/huh"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"

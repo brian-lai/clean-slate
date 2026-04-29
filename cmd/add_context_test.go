@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/blai/clean-slate/internal/manifest"
+	"github.com/brian-lai/clean-slate/internal/manifest"
 )
 
 func TestAddContextCopiesFiles(t *testing.T) {
