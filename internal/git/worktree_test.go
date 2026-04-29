@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/blai/clean-slate/internal/git"
-	"github.com/blai/clean-slate/internal/manifest"
 )
 
 // initRepo creates a temp git repo with an initial commit on the given branch.
@@ -58,6 +57,41 @@ func TestDefaultBranchFallback(t *testing.T) {
 	}
 }
 
+// TestDefaultBranchFromOriginHEAD verifies the primary symbolic-ref path
+// by cloning a "remote" repo, which causes origin/HEAD to be set.
+func TestDefaultBranchFromOriginHEAD(t *testing.T) {
+	// Create a source repo with "trunk" as the default branch
+	source := initRepo(t, "trunk")
+
+	// Clone it to another dir; git clone sets origin/HEAD → trunk
+	cloneDir := t.TempDir()
+	clonePath := filepath.Join(cloneDir, "clone")
+	cmd := exec.Command("git", "clone", source, clonePath)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git clone: %v\n%s", err, out)
+	}
+
+	branch, err := git.DefaultBranch(clonePath)
+	if err != nil {
+		t.Fatalf("DefaultBranch: %v", err)
+	}
+	if branch != "trunk" {
+		t.Errorf("DefaultBranch = %q, want %q (from origin/HEAD)", branch, "trunk")
+	}
+}
+
+// TestDefaultBranchNone verifies ErrNoDefaultBranch is returned when
+// origin/HEAD is unset AND neither main nor master exist.
+func TestDefaultBranchNone(t *testing.T) {
+	// Init repo on a non-standard branch
+	repo := initRepo(t, "feature/weird")
+
+	_, err := git.DefaultBranch(repo)
+	if !errors.Is(err, git.ErrNoDefaultBranch) {
+		t.Errorf("DefaultBranch on repo with no main/master = %v, want ErrNoDefaultBranch", err)
+	}
+}
+
 func TestWorktreeAdd(t *testing.T) {
 	repo := initRepo(t, "main")
 	destDir := t.TempDir()
@@ -101,7 +135,7 @@ func TestWorktreeAddBranchExists(t *testing.T) {
 	}
 
 	_, err := git.AddWorktree(repo, filepath.Join(destDir, "wt"), "ws/my-task")
-	if !errors.Is(err, manifest.ErrWorktreeBranchExists) {
+	if !errors.Is(err, git.ErrWorktreeBranchExists) {
 		t.Errorf("AddWorktree with existing branch = %v, want ErrWorktreeBranchExists", err)
 	}
 }
@@ -127,10 +161,7 @@ func TestWorktreeRemove(t *testing.T) {
 func TestListRepos(t *testing.T) {
 	reposDir := t.TempDir()
 
-	// Create 2 git repos
 	for _, name := range []string{"repo-a", "repo-b"} {
-		initRepo(t, "main") // creates in t.TempDir(), not reposDir
-		// Instead, create repos directly under reposDir
 		dir := filepath.Join(reposDir, name)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			t.Fatal(err)
