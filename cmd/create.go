@@ -37,7 +37,7 @@ var (
 )
 
 func init() {
-	createCmd.Flags().StringVar(&createJira, "jira", "", "JIRA ticket (e.g. RNA-549)")
+	createCmd.Flags().StringVar(&createJira, "jira", "", "JIRA ticket (e.g. PROJ-549)")
 	createCmd.Flags().StringVar(&createDesc, "description", "", "Brief description of the task (required)")
 	createCmd.Flags().StringArrayVar(&createRepos, "repo", nil, "Repository name from ~/projects/repos/ (repeatable)")
 	createCmd.Flags().StringArrayVar(&createContextDoc, "context-doc", nil, "Path to a supporting document (repeatable)")
