@@ -55,7 +55,8 @@ when it expires.
 ## If a release goes wrong
 
 - **The tag was pushed but the workflow didn't fire.** Check the trigger
-  regex matched (must be exactly `vX.Y.Z`, no suffix).
+  glob matched (must be exactly `vX.Y.Z`, no suffix — pre-release tags
+  like `v1.0.0-rc1` are intentionally excluded).
 - **GitHub release was created but tap update failed.** Most common cause:
   `TAP_REPO_TOKEN` expired or is missing. Re-run the `update-tap` job after
   fixing the secret, or bump the formula manually with:
