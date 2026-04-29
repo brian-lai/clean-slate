@@ -14,10 +14,11 @@ var outWriter io.Writer = os.Stdout
 var errWriter io.Writer = os.Stderr
 
 var rootCmd = &cobra.Command{
-	Use:          "cs",
-	Short:        "Clean Slate — task workspace manager",
-	Long:         `cs creates and manages isolated task workspaces under ~/projects/tasks/.`,
-	SilenceUsage: true,
+	Use:           "cs",
+	Short:         "Clean Slate — task workspace manager",
+	Long:          `cs creates and manages isolated task workspaces under ~/projects/tasks/.`,
+	SilenceUsage:  true,
+	SilenceErrors: true, // commands emit their own error output (plain or JSON)
 }
 
 func Execute() {
