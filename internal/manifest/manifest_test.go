@@ -14,13 +14,13 @@ func TestTaskRoundTrip(t *testing.T) {
 	task := manifest.Task{
 		Name:        "my-task",
 		CreatedAt:   time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC),
-		JiraTicket:  "RNA-549",
+		JiraTicket:  "PROJ-549",
 		Description: "Test task",
 		Repos: []manifest.RepoRef{
 			{
-				Name:           "rna",
-				Source:         "/projects/repos/rna",
-				WorktreePath:   "rna",
+				Name:           "alpha",
+				Source:         "/projects/repos/alpha",
+				WorktreePath:   "alpha",
 				WorktreeBranch: "ws/my-task",
 				BaseBranch:     "main",
 			},
@@ -135,7 +135,7 @@ func TestValidateEmptyRepoSource(t *testing.T) {
 		Name:        "valid",
 		Description: "desc",
 		Repos: []manifest.RepoRef{
-			{Name: "rna", Source: ""},
+			{Name: "alpha", Source: ""},
 		},
 	}
 	err := manifest.Validate(task)

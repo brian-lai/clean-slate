@@ -10,7 +10,7 @@ func TestNeedsPromptAllFilled(t *testing.T) {
 	prefilled := tui.CreateInputs{
 		Name:        "my-task",
 		Description: "A description",
-		JiraTicket:  "RNA-549",
+		JiraTicket:  "PROJ-549",
 		Repos:       []string{"repo-a"},
 		ContextDocs: []string{"/tmp/notes.txt"},
 	}
@@ -61,24 +61,24 @@ func TestNeedsPromptOptionalEmpty(t *testing.T) {
 }
 
 func TestFuzzyMatchRepos(t *testing.T) {
-	repos := []string{"rna", "rna-cdc", "rna-cdc2", "banksy", "benefits", "calendar"}
+	repos := []string{"alpha", "alpha-core", "alpha-core2", "bravo", "charlie", "delta"}
 
-	// "rn" should match rna* repos first
-	matches := tui.FuzzyMatchRepos(repos, "rn")
+	// "al" should match alpha* repos first
+	matches := tui.FuzzyMatchRepos(repos, "al")
 	if len(matches) < 3 {
-		t.Fatalf("FuzzyMatchRepos(rn) returned %d matches, want >= 3 (rna, rna-cdc, rna-cdc2)", len(matches))
+		t.Fatalf("FuzzyMatchRepos(al) returned %d matches, want >= 3 (alpha, alpha-core, alpha-core2)", len(matches))
 	}
 
-	// Top 3 results should all contain "rn"
+	// Top 3 results should all contain "al"
 	for i := 0; i < 3; i++ {
-		if matches[i] != "rna" && matches[i] != "rna-cdc" && matches[i] != "rna-cdc2" {
-			t.Errorf("FuzzyMatchRepos(rn)[%d] = %q, want an rna* repo in top 3", i, matches[i])
+		if matches[i] != "alpha" && matches[i] != "alpha-core" && matches[i] != "alpha-core2" {
+			t.Errorf("FuzzyMatchRepos(al)[%d] = %q, want an alpha* repo in top 3", i, matches[i])
 		}
 	}
 }
 
 func TestFuzzyMatchReposNoMatch(t *testing.T) {
-	repos := []string{"rna", "banksy"}
+	repos := []string{"alpha", "bravo"}
 	matches := tui.FuzzyMatchRepos(repos, "zzzzz")
 	if len(matches) != 0 {
 		t.Errorf("FuzzyMatchRepos(zzzzz) = %v, want empty", matches)
@@ -86,7 +86,7 @@ func TestFuzzyMatchReposNoMatch(t *testing.T) {
 }
 
 func TestFuzzyMatchReposEmptyQuery(t *testing.T) {
-	repos := []string{"rna", "banksy", "calendar"}
+	repos := []string{"alpha", "bravo", "delta"}
 	matches := tui.FuzzyMatchRepos(repos, "")
 	// Empty query returns all repos
 	if len(matches) != len(repos) {

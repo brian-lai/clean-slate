@@ -90,7 +90,7 @@ func PromptCreate(repoNames []string, prefilled CreateInputs) (CreateInputs, err
 	if result.JiraTicket == "" {
 		jiraField = huh.NewInput().
 			Title("JIRA ticket (optional)").
-			Description("e.g., RNA-549 (leave blank if none)").
+			Description("e.g., PROJ-549 (leave blank if none)").
 			Value(&result.JiraTicket)
 		inputFields = append(inputFields, jiraField)
 	}
