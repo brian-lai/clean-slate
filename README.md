@@ -57,11 +57,11 @@ Flags:
 
 ```sh
 cs create                              # interactive: prompts for name, JIRA, context, repos
-cs create --name RNA-549 --description "fix login regression" --repos api,frontend
+cs create --name PROJ-549 --description "fix login regression" --repos api,frontend
 cs list --json
-cs info RNA-549
-cs open RNA-549                        # new terminal tab cd'd into the workspace (macOS)
-cs clean RNA-549                       # remove worktrees + task dir
+cs info PROJ-549
+cs open PROJ-549                        # new terminal tab cd'd into the workspace (macOS)
+cs clean PROJ-549                       # remove worktrees + task dir
 ```
 
 ### Shell completion

@@ -167,13 +167,13 @@ Task names must match `[a-zA-Z0-9._-]+` (validated by `manifest.Validate`).
 {
   "name": "my-task",
   "created_at": "2026-04-29T11:30:00Z",
-  "jira_ticket": "RNA-549",
-  "description": "Investigate payroll dataset sync failures",
+  "jira_ticket": "PROJ-549",
+  "description": "Investigate dataset sync failures",
   "repos": [
     {
-      "name": "rna",
-      "source": "/Users/blai/projects/repos/rna",
-      "worktree_path": "/Users/blai/projects/tasks/my-task/rna",
+      "name": "alpha",
+      "source": "/Users/blai/projects/repos/alpha",
+      "worktree_path": "/Users/blai/projects/tasks/my-task/alpha",
       "worktree_branch": "ws/my-task",
       "base_branch": "main"
     }

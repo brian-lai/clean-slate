@@ -2,7 +2,7 @@
 
 > **Parent plan:** `2026-04-29-clean-slate-cli.md`
 > **Prerequisite:** None
-> **Outcome:** `cs create <name> --description "..." --repo rna --repo rna-cdc` works end-to-end, creating a task directory with git worktrees and a task.json manifest. No interactive prompts yet.
+> **Outcome:** `cs create <name> --description "..." --repo alpha --repo alpha-core` works end-to-end, creating a task directory with git worktrees and a task.json manifest. No interactive prompts yet.
 
 ---
 

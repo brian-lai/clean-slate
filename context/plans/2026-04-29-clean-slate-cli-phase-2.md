@@ -87,7 +87,7 @@ func LaunchTerminal(dir string) error
   - Test that fuzzy matching filters repo names correctly
   - Test that all-flags-provided returns inputs without prompting
   - **File(s):** `internal/tui/prompt_test.go`
-  - **Tests:** `TestPrefilledSkipsPrompt` — all fields set in prefilled, assert no prompt needed flag. `TestFuzzyMatchRepos` — fuzzy match "rn" against repo list, assert "rna", "rna-cdc" ranked first. `TestNeedsPrompt` — various partial input states, assert which fields need prompting.
+  - **Tests:** `TestPrefilledSkipsPrompt` — all fields set in prefilled, assert no prompt needed flag. `TestFuzzyMatchRepos` — fuzzy match "rn" against repo list, assert "alpha", "alpha-core" ranked first. `TestNeedsPrompt` — various partial input states, assert which fields need prompting.
 
 - [ ] **Implement TUI prompts for create**
   - **File(s):** `internal/tui/prompt.go`, `internal/tui/repo_selector.go`

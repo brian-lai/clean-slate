@@ -13,15 +13,15 @@ Phase 1 delivers the foundation of the `cs` CLI: the Go module, four internal pa
 
 ```
 cs create my-task \
-  --description "Investigate payroll sync" \
-  --jira RNA-549 \
-  --repo rna \
-  --repo rna-cdc \
+  --description "Investigate login regression" \
+  --jira PROJ-549 \
+  --repo alpha \
+  --repo alpha-core \
   --context-doc /tmp/error.log \
   --json
 ```
 
-Produces: `~/projects/tasks/my-task/` with `task.json`, `context/error.log`, and two git worktrees (`rna/`, `rna-cdc/`) on new branches `ws/my-task` branched from each repo's default branch.
+Produces: `~/projects/tasks/my-task/` with `task.json`, `context/error.log`, and two git worktrees (`alpha/`, `alpha-core/`) on new branches `ws/my-task` branched from each repo's default branch.
 
 ## Commits (TDD: red → green, test-first for every implementation)
 
