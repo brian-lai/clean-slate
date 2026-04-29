@@ -74,6 +74,10 @@ cs completion fish > ~/.config/fish/completions/cs.fish
 
 Homebrew installs completions automatically.
 
+## Releases
+
+See [RELEASING.md](RELEASING.md) for the release process (maintainers only).
+
 ## License
 
 [MIT](LICENSE) — Copyright (c) 2026 Brian Lai
