@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/blai/clean-slate/internal/config"
 	"github.com/blai/clean-slate/internal/manifest"
@@ -153,7 +155,16 @@ func runAddContext(cmd *cobra.Command, args []string) error {
 
 // sourceSetPath returns the path to the hidden sidecar file that tracks the
 // set of absolute source paths previously added to a task's context/.
-// This is how add-context dedupes repeat invocations with the same source.
+//
+// This is a provisional implementation. The proper fix is to evolve
+// task.json's ContextDocs schema to {source, path} pairs so source tracking
+// lives in one place. Tracked as a follow-up for Phase 3 / post-Phase-2.
+//
+// If this file is lost (task dir copied, manually deleted, etc.), dedup
+// silently stops working — a new add-context with an already-present source
+// will copy it a second time with a _N suffix. Not ideal; acceptable for now
+// since the set of users is internal and recovery is trivial (edit the file
+// or accept the duplicate).
 func sourceSetPath(taskDir string) string {
 	return filepath.Join(taskDir, ".cs-sources")
 }
@@ -169,7 +180,8 @@ func readSourceSet(taskDir string) (map[string]bool, error) {
 		return nil, fmt.Errorf("read source set: %w", err)
 	}
 	set := map[string]bool{}
-	for _, line := range splitLines(string(data)) {
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
 		if line != "" {
 			set[line] = true
 		}
@@ -177,32 +189,20 @@ func readSourceSet(taskDir string) (map[string]bool, error) {
 	return set, nil
 }
 
-// writeSourceSet overwrites the source set sidecar with the given paths.
+// writeSourceSet overwrites the source set sidecar with the given paths,
+// sorted for reproducible diffs.
 func writeSourceSet(taskDir string, set map[string]bool) error {
 	paths := make([]string, 0, len(set))
 	for p := range set {
 		paths = append(paths, p)
 	}
-	var buf []byte
+	sort.Strings(paths)
+	var b strings.Builder
 	for _, p := range paths {
-		buf = append(buf, []byte(p+"\n")...)
+		b.WriteString(p)
+		b.WriteByte('\n')
 	}
-	return os.WriteFile(sourceSetPath(taskDir), buf, 0644)
-}
-
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
+	return os.WriteFile(sourceSetPath(taskDir), []byte(b.String()), 0644)
 }
 
 // copyFileForAddContext copies a file from src to dest, preserving content.

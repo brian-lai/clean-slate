@@ -140,3 +140,46 @@ func TestCleanNonExistentTask(t *testing.T) {
 		t.Error("clean of non-existent task: expected error")
 	}
 }
+
+// When stdin is not a TTY (the normal test environment), clean without --force
+// must fail with a clear error rather than silently prompting or proceeding.
+func TestCleanRequiresForceInNonTTY(t *testing.T) {
+	tasksDir := t.TempDir()
+	reposDir := t.TempDir()
+	t.Setenv("CS_TASKS_DIR", tasksDir)
+	t.Setenv("CS_REPOS_DIR", reposDir)
+
+	taskDir, _ := setupTaskWithWorktree(t, tasksDir, reposDir, "needs-force", "repo-needs-force")
+
+	// Test env has no TTY; no --force → expect error
+	_, stderr, err := executeCmd(t, "clean", "needs-force")
+	if err == nil {
+		t.Error("clean without --force in non-TTY mode: expected error, got nil")
+	}
+	if !containsString(stderr, "force") {
+		t.Errorf("error should mention --force: %s", stderr)
+	}
+
+	// Task dir must still exist
+	if _, err := os.Stat(taskDir); os.IsNotExist(err) {
+		t.Error("task dir was removed even though clean should have rejected")
+	}
+}
+
+// JSON mode must require --force regardless of TTY state.
+func TestCleanJSONRequiresForce(t *testing.T) {
+	tasksDir := t.TempDir()
+	reposDir := t.TempDir()
+	t.Setenv("CS_TASKS_DIR", tasksDir)
+	t.Setenv("CS_REPOS_DIR", reposDir)
+
+	setupTaskWithWorktree(t, tasksDir, reposDir, "json-needs-force", "repo-jnf")
+
+	_, stderr, err := executeCmd(t, "clean", "json-needs-force", "--json")
+	if err == nil {
+		t.Error("clean --json without --force: expected error")
+	}
+	if !containsString(stderr, "force") {
+		t.Errorf("stderr should mention --force: %s", stderr)
+	}
+}
