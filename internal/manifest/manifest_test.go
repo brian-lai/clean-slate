@@ -106,7 +106,7 @@ func TestValidateInvalidTaskNameChars(t *testing.T) {
 		}
 	}
 
-	valid := []string{"my-task", "task_1", "RNA.549", "a", "my-task-2"}
+	valid := []string{"my-task", "task_1", "PROJ.549", "a", "my-task-2"}
 	for _, name := range valid {
 		task := manifest.Task{Name: name, Description: "desc"}
 		err := manifest.Validate(task)
