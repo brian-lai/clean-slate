@@ -9,6 +9,8 @@ import (
 	"github.com/blai/clean-slate/internal/config"
 	"github.com/blai/clean-slate/internal/git"
 	"github.com/blai/clean-slate/internal/manifest"
+	"github.com/charmbracelet/huh"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +27,7 @@ var cleanCmd = &cobra.Command{
 }
 
 func init() {
-	cleanCmd.Flags().BoolVar(&cleanForce, "force", false, "Skip confirmation and force-remove dirty worktrees")
+	cleanCmd.Flags().BoolVar(&cleanForce, "force", false, "Skip interactive confirmation and allow removing dirty worktrees. Required in --json / non-TTY contexts.")
 	cleanCmd.Flags().BoolVar(&cleanArchive, "archive", false, "Move task dir to _archive/ instead of deleting")
 	rootCmd.AddCommand(cleanCmd)
 }
@@ -67,11 +69,35 @@ func runClean(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// In JSON mode without --force, we require --force since no interactive confirmation is possible
-	if useJSON && !cleanForce {
-		werr := fmt.Errorf("--json mode requires --force (no interactive confirmation)")
-		outputError(cmd, useJSON, werr)
-		return werr
+	// In JSON or non-TTY mode, --force is required (no way to confirm).
+	// Otherwise prompt the user before proceeding with a destructive operation.
+	isInteractive := !useJSON && isatty.IsTerminal(os.Stdin.Fd())
+	if !cleanForce {
+		if !isInteractive {
+			werr := fmt.Errorf("--force is required in non-interactive mode")
+			outputError(cmd, useJSON, werr)
+			return werr
+		}
+
+		action := "remove"
+		if cleanArchive {
+			action = "archive"
+		}
+		confirmed := false
+		prompt := huh.NewConfirm().
+			Title(fmt.Sprintf("%s task %q and %d worktree(s)?", action, taskName, len(task.Repos))).
+			Description(fmt.Sprintf("Target: %s", taskDir)).
+			Affirmative("Yes").
+			Negative("Cancel").
+			Value(&confirmed)
+		if err := prompt.Run(); err != nil {
+			outputError(cmd, useJSON, err)
+			return err
+		}
+		if !confirmed {
+			fmt.Fprintln(cmd.OutOrStdout(), "Cancelled.")
+			return nil
+		}
 	}
 
 	// Remove each worktree; collect warnings but keep going on individual failures

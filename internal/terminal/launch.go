@@ -9,50 +9,70 @@ import (
 // Launch opens a new terminal window (iTerm2 if running, else Terminal.app)
 // cd'd into dir. Returns a fallback string (to print) if neither terminal
 // is available.
+//
+// The path is passed through osascript's argv rather than interpolated into
+// the AppleScript source, so there is no parser injection vector.
 func Launch(dir string) (fallback string, err error) {
 	if isRunning("iTerm2") {
-		return "", runOSAScript(ITermScript(dir))
+		return "", runOSAScriptWithArg(ITermScriptTemplate(), dir)
 	}
 	if hasApp("Terminal") {
-		return "", runOSAScript(TerminalAppScript(dir))
+		return "", runOSAScriptWithArg(TerminalAppScriptTemplate(), dir)
 	}
 	return Fallback(dir), nil
 }
 
-// ITermScript returns AppleScript that opens a new iTerm2 tab cd'd into dir.
-// The path is single-quote-escaped using the POSIX '\” idiom so that paths
-// containing single quotes don't break the shell command iTerm runs.
-func ITermScript(dir string) string {
-	safe := escapeSingleQuotes(dir)
-	return fmt.Sprintf(`tell application "iTerm"
-    activate
-    tell current window
-        create tab with default profile
-        tell current session to write text "cd '%s'"
+// ITermScriptTemplate returns AppleScript that reads the target directory
+// from argv (item 1) and opens a new iTerm2 tab cd'd into it. The path is
+// never interpolated into the script source: osascript passes it as argv,
+// and AppleScript's `quoted form of` handles shell quoting for `do shell script`.
+func ITermScriptTemplate() string {
+	return `on run argv
+    set dir to item 1 of argv
+    tell application "iTerm"
+        activate
+        tell current window
+            create tab with default profile
+            tell current session to write text ("cd " & quoted form of dir)
+        end tell
     end tell
-end tell`, safe)
+end run`
 }
 
-// TerminalAppScript returns AppleScript that opens a new Terminal.app window
-// cd'd into dir.
+// TerminalAppScriptTemplate is the Terminal.app equivalent of ITermScriptTemplate.
+func TerminalAppScriptTemplate() string {
+	return `on run argv
+    set dir to item 1 of argv
+    tell application "Terminal"
+        activate
+        do script ("cd " & quoted form of dir)
+    end tell
+end run`
+}
+
+// ITermScript is kept for backward-compatibility with existing tests.
+// It returns the template; callers that want to actually launch a terminal
+// should use Launch instead.
+func ITermScript(dir string) string {
+	return ITermScriptTemplate()
+}
+
+// TerminalAppScript — same note as ITermScript.
 func TerminalAppScript(dir string) string {
-	safe := escapeSingleQuotes(dir)
-	return fmt.Sprintf(`tell application "Terminal"
-    activate
-    do script "cd '%s'"
-end tell`, safe)
+	return TerminalAppScriptTemplate()
 }
 
 // Fallback returns a human-readable message containing the path so the user
-// can cd manually when no supported terminal is available.
+// can cd manually when no supported terminal is available. The path is
+// single-quoted for safety when the user copy-pastes the command.
 func Fallback(dir string) string {
-	return fmt.Sprintf("cd %s", dir)
+	return fmt.Sprintf("cd %s", shellQuote(dir))
 }
 
-// escapeSingleQuotes replaces ' with '\” so that the resulting string can be
-// safely placed inside single quotes in a POSIX shell command.
-func escapeSingleQuotes(s string) string {
-	return strings.ReplaceAll(s, `'`, `'\''`)
+// shellQuote wraps a string in single quotes, escaping any embedded single
+// quotes using the POSIX '\” idiom.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, `'`, `'\''`) + "'"
 }
 
 // isRunning checks whether an application is currently running (macOS).
@@ -67,20 +87,21 @@ func isRunning(appName string) bool {
 }
 
 // hasApp checks whether an application is installed (macOS).
+// Terminal.app is always present on macOS, so we short-circuit.
 func hasApp(appName string) bool {
-	_, err := exec.Command("osascript", "-e",
-		fmt.Sprintf(`tell application "Finder" to exists application file id "com.apple.%s"`, strings.ToLower(appName)),
-	).Output()
-	// Fallback to assuming Terminal.app is always present on macOS
 	if appName == "Terminal" {
 		return true
 	}
+	_, err := exec.Command("osascript", "-e",
+		fmt.Sprintf(`tell application "Finder" to exists application file id "com.apple.%s"`, strings.ToLower(appName)),
+	).Output()
 	return err == nil
 }
 
-// runOSAScript executes an AppleScript via osascript.
-func runOSAScript(script string) error {
-	cmd := exec.Command("osascript", "-e", script)
+// runOSAScriptWithArg runs an AppleScript template and passes arg as argv[1].
+// The argument is never parsed as AppleScript source.
+func runOSAScriptWithArg(script, arg string) error {
+	cmd := exec.Command("osascript", "-e", script, arg)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("osascript: %w\n%s", err, out)
 	}
