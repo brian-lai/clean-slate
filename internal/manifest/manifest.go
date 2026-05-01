@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"time"
+
+	"github.com/brian-lai/clean-slate/internal/atomicio"
 )
 
 var (
@@ -52,7 +54,7 @@ func Write(task Task, dir string) error {
 	if err != nil {
 		return fmt.Errorf("marshal task: %w", err)
 	}
-	return os.WriteFile(filepath.Join(dir, "task.json"), data, 0644)
+	return atomicio.WriteFile(filepath.Join(dir, "task.json"), data, 0644)
 }
 
 func Read(dir string) (Task, error) {
