@@ -30,12 +30,22 @@ func runAddContext(cmd *cobra.Command, args []string) error {
 	docPaths := args[1:]
 
 	cfg := config.Load()
+	// Opportunistic orphan sweep before touching per-task state.
+	sweepWarnings := sweepOrphans(cfg.TasksDir)
+
 	taskDir := filepath.Join(cfg.TasksDir, taskName)
 
 	if _, err := os.Stat(taskDir); os.IsNotExist(err) {
 		werr := fmt.Errorf("task %q not found at %s", taskName, taskDir)
 		return outputError(cmd, useJSON, werr)
 	}
+
+	// Per-task lock — add-context is a read-modify-write on task.json.
+	lock, err := lockTask(cfg.TasksDir, taskName)
+	if err != nil {
+		return outputError(cmd, useJSON, err)
+	}
+	defer lock.Release()
 
 	task, err := manifest.Read(taskDir)
 	if err != nil {
@@ -121,6 +131,9 @@ func runAddContext(cmd *cobra.Command, args []string) error {
 	if err := manifest.Write(task, taskDir); err != nil {
 		return outputError(cmd, useJSON, err)
 	}
+
+	// Prepend orphan-sweep warnings.
+	warnings = append(sweepWarnings, warnings...)
 
 	if useJSON {
 		result := map[string]any{

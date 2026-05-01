@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"time"
 
+	"github.com/brian-lai/clean-slate/internal/cslock"
+	"github.com/brian-lai/clean-slate/internal/journal"
 	"github.com/brian-lai/clean-slate/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -100,13 +104,21 @@ func ResetOutput() {
 // --- JSON output contract ---
 //
 // Commands that support --json MUST adhere to the following contract:
-//   1. On success: indented JSON on stdout via outputJSON; stderr empty.
+//   1. On success: indented JSON on stdout via outputJSON.
 //   2. On error: JSON error object {"error": "..."} on stderr via outputError;
 //      stdout empty.
-//   3. Warnings must appear inside the success JSON payload (typically under
-//      a "warnings" field), NOT as plain text on stderr.
-//   4. Empty collections must serialize as [] not null (initialize slices
+//   3. Empty collections must serialize as [] not null (initialize slices
 //      before marshaling).
+//
+// Warnings split by command kind (v0.2.0+):
+//   - Write-mutating commands (create, clean, add-context): warnings MUST
+//     appear inside the success JSON payload under a "warnings" field, NOT on
+//     stderr. Sweep recovery warnings are appended to the same array.
+//   - Read-only commands (list, info, status, open): stdout stays a clean
+//     JSON payload; orphan-sweep recovery warnings are emitted to stderr as
+//     plain text `Warning: <msg>` in both human and --json modes. This is
+//     carved out because extending list/info/status JSON shapes with a
+//     top-level `warnings` field would break v0.1.x parsers. See CONTRACT.md.
 //
 // Tests in cmd/json_test.go enforce these invariants across all commands.
 
@@ -137,4 +149,61 @@ func outputError(cmd *cobra.Command, useJSON bool, err error) error {
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+}
+
+// sweepOrphans finds journals whose owning PID is dead, rolls them back, and
+// returns human-readable warnings — one per recovered task. Called lazily at
+// the top of every cs command that opens tasksDir; no daemon, no cs doctor.
+//
+// Emission rule (per master plan): write-mutating commands append these
+// warnings to their JSON success payload's `warnings` field; read-only
+// commands emit each as `Warning: <text>` on stderr.
+func sweepOrphans(tasksDir string) []string {
+	entries, err := journal.ScanOrphans(tasksDir)
+	if err != nil || len(entries) == 0 {
+		return nil
+	}
+	var warnings []string
+	for _, e := range entries {
+		name := filepath.Base(e.TaskDir)
+		if rbErr := journal.Rollback(e); rbErr != nil {
+			warnings = append(warnings, fmt.Sprintf("partial recovery of orphaned task %q (crashed %s ago): %v",
+				name, time.Since(e.Started).Truncate(time.Second), rbErr))
+		} else {
+			warnings = append(warnings, fmt.Sprintf("recovered orphaned task %q (crashed %s ago)",
+				name, time.Since(e.Started).Truncate(time.Second)))
+		}
+	}
+	return warnings
+}
+
+// emitSweepWarningsStderr writes sweep warnings as plain-text `Warning: <msg>`
+// lines to cmd's stderr. Used by read-only commands; write-mutating commands
+// embed these in their JSON payload instead.
+func emitSweepWarningsStderr(cmd *cobra.Command, warnings []string) {
+	for _, w := range warnings {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", w)
+	}
+}
+
+// lockTask acquires the per-task advisory lock at
+// <tasksDir>/.cs-locks/<taskname>.lock. On contention it returns a
+// CLI-friendly error shaped for v0.2.0: "task %q is locked by PID %d
+// (started %s ago)" — or "an unknown process" when the race-with-writer
+// payload window yielded no PID. Callers defer lock.Release().
+func lockTask(tasksDir, taskName string) (*cslock.Lock, error) {
+	lockPath := filepath.Join(tasksDir, ".cs-locks", taskName+".lock")
+	lock, err := cslock.Acquire(lockPath)
+	if err != nil {
+		var locked *cslock.ErrLocked
+		if errors.As(err, &locked) {
+			if locked.Info.PID == -1 {
+				return nil, fmt.Errorf("task %q is locked by an unknown process", taskName)
+			}
+			return nil, fmt.Errorf("task %q is locked by PID %d (started %s ago)",
+				taskName, locked.Info.PID, time.Since(locked.Info.Started).Truncate(time.Second))
+		}
+		return nil, err
+	}
+	return lock, nil
 }

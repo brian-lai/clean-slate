@@ -26,6 +26,10 @@ func runInfo(cmd *cobra.Command, args []string) error {
 	taskName := args[0]
 
 	cfg := config.Load()
+
+	// Read-only sweep: emit to stderr.
+	emitSweepWarningsStderr(cmd, sweepOrphans(cfg.TasksDir))
+
 	taskDir := filepath.Join(cfg.TasksDir, taskName)
 
 	if _, err := os.Stat(taskDir); err != nil {

@@ -2,7 +2,9 @@ package journal_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -170,5 +172,207 @@ func TestWriteUsesAtomicIO(t *testing.T) {
 		if strings.Contains(e.Name(), ".tmp-") {
 			t.Errorf("leftover tempfile: %s", e.Name())
 		}
+	}
+}
+
+// deadPID spawns a subprocess, waits for it, and returns its PID. The kernel
+// has reaped the process so that PID is guaranteed dead. Safer than hardcoding
+// a large number because pid_max can be arbitrarily high on modern Linux.
+func deadPID(t *testing.T) int {
+	t.Helper()
+	c := exec.Command("true")
+	if runtime.GOOS == "darwin" {
+		c = exec.Command("/usr/bin/true")
+	}
+	if err := c.Run(); err != nil {
+		t.Fatalf("spawn dead-PID subprocess: %v", err)
+	}
+	return c.Process.Pid
+}
+
+func TestScanOrphansFiltersLiveProcesses(t *testing.T) {
+	tasksDir := t.TempDir()
+	aliveDir := filepath.Join(tasksDir, "alive")
+	deadDir := filepath.Join(tasksDir, "dead")
+	os.MkdirAll(aliveDir, 0755)
+	os.MkdirAll(deadDir, 0755)
+
+	dp := deadPID(t)
+
+	// Sanity: dp must not coincidentally equal os.Getpid().
+	if dp == os.Getpid() {
+		t.Skip("dead PID collided with ourselves; rerun")
+	}
+
+	aliveEntry := makeEntry(os.Getpid(), aliveDir)
+	deadEntry := makeEntry(dp, deadDir)
+
+	if err := journal.Write(aliveDir, aliveEntry); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.Write(deadDir, deadEntry); err != nil {
+		t.Fatal(err)
+	}
+
+	orphans, err := journal.ScanOrphans(tasksDir)
+	if err != nil {
+		t.Fatalf("ScanOrphans: %v", err)
+	}
+
+	if len(orphans) != 1 {
+		t.Fatalf("expected 1 orphan, got %d: %+v", len(orphans), orphans)
+	}
+	if orphans[0].PID != dp {
+		t.Errorf("orphan PID = %d, want %d (dead)", orphans[0].PID, dp)
+	}
+}
+
+func TestScanOrphansIgnoresMissingDirs(t *testing.T) {
+	orphans, err := journal.ScanOrphans(filepath.Join(t.TempDir(), "does-not-exist"))
+	if err != nil {
+		t.Errorf("ScanOrphans on missing dir: want nil error, got %v", err)
+	}
+	if len(orphans) != 0 {
+		t.Errorf("expected empty slice, got %v", orphans)
+	}
+}
+
+func TestScanOrphansMultiplePIDsPerTaskDir(t *testing.T) {
+	tasksDir := t.TempDir()
+	taskDir := filepath.Join(tasksDir, "shared")
+	os.MkdirAll(taskDir, 0755)
+
+	dp := deadPID(t)
+	if dp == os.Getpid() {
+		t.Skip("PID collision; rerun")
+	}
+
+	aliveEntry := makeEntry(os.Getpid(), taskDir)
+	deadEntry := makeEntry(dp, taskDir)
+	journal.Write(taskDir, aliveEntry)
+	journal.Write(taskDir, deadEntry)
+
+	orphans, err := journal.ScanOrphans(tasksDir)
+	if err != nil {
+		t.Fatalf("ScanOrphans: %v", err)
+	}
+	if len(orphans) != 1 {
+		t.Fatalf("expected exactly 1 orphan (dead PID), got %d: %+v", len(orphans), orphans)
+	}
+	if orphans[0].PID != dp {
+		t.Errorf("orphan PID = %d, want %d", orphans[0].PID, dp)
+	}
+}
+
+// TestRollbackRemovesWorktreesAndBranches exercises the full rollback sweep
+// against a real git repo + real worktree + real branch.
+func TestRollbackRemovesWorktreesAndBranches(t *testing.T) {
+	reposDir := t.TempDir()
+	tasksDir := t.TempDir()
+
+	repoPath := filepath.Join(reposDir, "repo-rb")
+	if err := os.MkdirAll(repoPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	run := func(dir string, args ...string) {
+		c := exec.Command("git", args...)
+		c.Dir = dir
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run(repoPath, "init", "-b", "main")
+	run(repoPath, "config", "user.email", "test@test.com")
+	run(repoPath, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(repoPath, "README.md"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run(repoPath, "add", ".")
+	run(repoPath, "commit", "-m", "init")
+
+	taskDir := filepath.Join(tasksDir, "rb-task")
+	if err := os.MkdirAll(taskDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	worktreeDest := filepath.Join(taskDir, "repo-rb")
+	run(repoPath, "worktree", "add", worktreeDest, "-b", "ws/rb-task", "main")
+
+	entry := journal.Entry{
+		Op:        "create",
+		PID:       os.Getpid(),
+		Started:   time.Now().UTC(),
+		TaskDir:   taskDir,
+		Worktrees: []string{worktreeDest},
+		Branches:  []journal.BranchRef{{RepoPath: repoPath, Branch: "ws/rb-task"}},
+	}
+
+	if err := journal.Rollback(entry); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+
+	if _, err := os.Stat(worktreeDest); !os.IsNotExist(err) {
+		t.Errorf("worktree should be removed")
+	}
+	if _, err := os.Stat(taskDir); !os.IsNotExist(err) {
+		t.Errorf("task dir should be removed")
+	}
+
+	listOut, _ := exec.Command("git", "-C", repoPath, "branch", "--list", "ws/rb-task").Output()
+	if len(listOut) != 0 {
+		t.Errorf("ws/rb-task branch should be deleted, got: %s", listOut)
+	}
+}
+
+// TestRollbackIgnoresNonWsBranch verifies that Rollback does NOT touch a
+// branch whose name doesn't start with ws/ — defense-in-depth against a
+// tampered or corrupted journal.
+func TestRollbackIgnoresNonWsBranch(t *testing.T) {
+	entry := journal.Entry{
+		TaskDir: t.TempDir(),
+		Branches: []journal.BranchRef{
+			{RepoPath: "/nonexistent", Branch: "keepme"},
+		},
+	}
+	if err := journal.Rollback(entry); err != nil {
+		t.Errorf("Rollback should ignore non-ws/ branch, got error: %v", err)
+	}
+}
+
+// TestRollbackIdempotentWhenBranchAlreadyGone covers the concurrent-sweep
+// scenario: two processes both sweep the same orphan. First succeeds; the
+// second must not emit a bogus "partial recovery" warning because the
+// branch-delete step's post-condition is already met.
+func TestRollbackIdempotentWhenBranchAlreadyGone(t *testing.T) {
+	reposDir := t.TempDir()
+	repoPath := filepath.Join(reposDir, "repo-idem")
+	if err := os.MkdirAll(repoPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) {
+		c := exec.Command("git", args...)
+		c.Dir = repoPath
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-b", "main")
+	run("config", "user.email", "test@test.com")
+	run("config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(repoPath, "README.md"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", ".")
+	run("commit", "-m", "init")
+
+	// Journal references a ws/ branch that DOES NOT exist in the repo
+	// (simulating a concurrent sweeper having already deleted it).
+	entry := journal.Entry{
+		TaskDir: t.TempDir(),
+		Branches: []journal.BranchRef{
+			{RepoPath: repoPath, Branch: "ws/already-gone"},
+		},
+	}
+	if err := journal.Rollback(entry); err != nil {
+		t.Errorf("Rollback should be idempotent for missing branch, got: %v", err)
 	}
 }
