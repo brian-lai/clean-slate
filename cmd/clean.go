@@ -100,16 +100,28 @@ func runClean(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Remove each worktree; collect warnings but keep going on individual failures
+	// Remove each worktree and its task branch; collect warnings but keep going
+	// on individual failures.
 	var warnings []string
 	for _, r := range task.Repos {
 		wt := filepath.Join(taskDir, r.WorktreePath)
+
+		wtOK := true
 		if _, err := os.Stat(wt); os.IsNotExist(err) {
-			// Already gone; skip silently
-			continue
-		}
-		if err := git.RemoveWorktree(wt); err != nil {
+			// Already gone on disk; still attempt branch cleanup below.
+		} else if err := git.RemoveWorktree(wt); err != nil {
 			warnings = append(warnings, fmt.Sprintf("remove worktree %s: %v", r.Name, err))
+			wtOK = false
+		}
+
+		// Delete the ws/<task> branch in the source repo so repos don't
+		// accumulate abandoned task branches. Only delete branches that follow
+		// the ws/ convention cs itself writes; a manually-attached branch is
+		// left alone.
+		if wtOK && strings.HasPrefix(r.WorktreeBranch, "ws/") {
+			if err := git.DeleteBranch(r.Source, r.WorktreeBranch); err != nil {
+				warnings = append(warnings, fmt.Sprintf("delete branch %s: %v", r.WorktreeBranch, err))
+			}
 		}
 	}
 
