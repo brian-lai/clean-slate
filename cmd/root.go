@@ -104,13 +104,21 @@ func ResetOutput() {
 // --- JSON output contract ---
 //
 // Commands that support --json MUST adhere to the following contract:
-//   1. On success: indented JSON on stdout via outputJSON; stderr empty.
+//   1. On success: indented JSON on stdout via outputJSON.
 //   2. On error: JSON error object {"error": "..."} on stderr via outputError;
 //      stdout empty.
-//   3. Warnings must appear inside the success JSON payload (typically under
-//      a "warnings" field), NOT as plain text on stderr.
-//   4. Empty collections must serialize as [] not null (initialize slices
+//   3. Empty collections must serialize as [] not null (initialize slices
 //      before marshaling).
+//
+// Warnings split by command kind (v0.2.0+):
+//   - Write-mutating commands (create, clean, add-context): warnings MUST
+//     appear inside the success JSON payload under a "warnings" field, NOT on
+//     stderr. Sweep recovery warnings are appended to the same array.
+//   - Read-only commands (list, info, status, open): stdout stays a clean
+//     JSON payload; orphan-sweep recovery warnings are emitted to stderr as
+//     plain text `Warning: <msg>` in both human and --json modes. This is
+//     carved out because extending list/info/status JSON shapes with a
+//     top-level `warnings` field would break v0.1.x parsers. See CONTRACT.md.
 //
 // Tests in cmd/json_test.go enforce these invariants across all commands.
 

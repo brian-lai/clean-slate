@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -130,14 +131,41 @@ func ScanOrphans(tasksDir string) ([]Entry, error) {
 	return orphans, nil
 }
 
-// isAlive reports whether the given PID is a live process. Uses
-// kill(pid, 0) semantics via os.FindProcess and Signal(0).
+// isAlive reports whether the given PID is a live process. Uses kill(pid, 0)
+// semantics via os.FindProcess and Signal(0). Non-positive PIDs are treated
+// as dead (PID 0 is the scheduler; negative values are filenames like
+// `.cs-journal.-1` that should never legitimately exist but shouldn't be
+// interpreted as a live process if they do).
+//
+// EPERM handling: if we lack permission to signal a foreign-owned process,
+// the process DOES exist — treat as alive. Otherwise we'd sweep a live
+// foreign cs's work mid-operation on a multi-user tasks dir. Only ESRCH
+// (or the Go "process already finished" wrapping) means dead.
+// branchExists reports whether a local branch with the given name exists in
+// the repo. Shells to git — no cached state, so concurrent deletions are
+// observed correctly.
+func branchExists(repoPath, branch string) bool {
+	c := exec.Command("git", "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
+	c.Dir = repoPath
+	return c.Run() == nil
+}
+
 func isAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return false
 	}
-	return proc.Signal(syscall.Signal(0)) == nil
+	err = proc.Signal(syscall.Signal(0))
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, syscall.EPERM) {
+		return true
+	}
+	return false
 }
 
 // Rollback removes the worktrees, deletes the ws/-prefixed branches, and
@@ -160,7 +188,19 @@ func Rollback(e Entry) error {
 		if !strings.HasPrefix(br.Branch, "ws/") {
 			continue
 		}
+		// Rollback is idempotent: if a concurrent sweeper already deleted the
+		// branch (or the journal records a branch that was never fully
+		// created), silently treat that as success rather than emitting a
+		// bogus "partial recovery" warning.
+		if !branchExists(br.RepoPath, br.Branch) {
+			continue
+		}
 		if err := git.DeleteBranch(br.RepoPath, br.Branch); err != nil {
+			// Even here, if git reports "not found" after our pre-check (race),
+			// treat as success — the post-condition we care about is met.
+			if strings.Contains(err.Error(), "not found") {
+				continue
+			}
 			failures = append(failures, fmt.Sprintf("delete branch %s in %s: %v", br.Branch, br.RepoPath, err))
 		}
 	}

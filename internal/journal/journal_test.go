@@ -337,3 +337,42 @@ func TestRollbackIgnoresNonWsBranch(t *testing.T) {
 		t.Errorf("Rollback should ignore non-ws/ branch, got error: %v", err)
 	}
 }
+
+// TestRollbackIdempotentWhenBranchAlreadyGone covers the concurrent-sweep
+// scenario: two processes both sweep the same orphan. First succeeds; the
+// second must not emit a bogus "partial recovery" warning because the
+// branch-delete step's post-condition is already met.
+func TestRollbackIdempotentWhenBranchAlreadyGone(t *testing.T) {
+	reposDir := t.TempDir()
+	repoPath := filepath.Join(reposDir, "repo-idem")
+	if err := os.MkdirAll(repoPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) {
+		c := exec.Command("git", args...)
+		c.Dir = repoPath
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-b", "main")
+	run("config", "user.email", "test@test.com")
+	run("config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(repoPath, "README.md"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", ".")
+	run("commit", "-m", "init")
+
+	// Journal references a ws/ branch that DOES NOT exist in the repo
+	// (simulating a concurrent sweeper having already deleted it).
+	entry := journal.Entry{
+		TaskDir: t.TempDir(),
+		Branches: []journal.BranchRef{
+			{RepoPath: repoPath, Branch: "ws/already-gone"},
+		},
+	}
+	if err := journal.Rollback(entry); err != nil {
+		t.Errorf("Rollback should be idempotent for missing branch, got: %v", err)
+	}
+}
