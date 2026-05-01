@@ -78,6 +78,22 @@ func AddWorktree(repoPath, destPath, branchName string) (string, error) {
 	return baseBranch, nil
 }
 
+// DeleteBranch removes a local branch from the repo using `git branch -D`.
+// Uses -D (force) because cs clean may run on unmerged work after the user
+// has opted into destruction via --force or interactive confirmation. Returns
+// an error (including the branch name) if the branch is absent — callers
+// decide whether to surface it as a warning or hard-fail.
+func DeleteBranch(repoPath, branchName string) error {
+	cmd := exec.Command("git", "branch", "-D", branchName)
+	cmd.Dir = repoPath
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git branch -D %s: %w\n%s", branchName, err, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
 // RemoveWorktree removes a git worktree at the given path.
 func RemoveWorktree(worktreePath string) error {
 	cmd := exec.Command("git", "rev-parse", "--git-common-dir")
