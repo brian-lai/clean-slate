@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/brian-lai/clean-slate/internal/cslock"
+	"github.com/brian-lai/clean-slate/internal/journal"
 	"github.com/brian-lai/clean-slate/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -140,6 +141,41 @@ func outputError(cmd *cobra.Command, useJSON bool, err error) error {
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+}
+
+// sweepOrphans finds journals whose owning PID is dead, rolls them back, and
+// returns human-readable warnings — one per recovered task. Called lazily at
+// the top of every cs command that opens tasksDir; no daemon, no cs doctor.
+//
+// Emission rule (per master plan): write-mutating commands append these
+// warnings to their JSON success payload's `warnings` field; read-only
+// commands emit each as `Warning: <text>` on stderr.
+func sweepOrphans(tasksDir string) []string {
+	entries, err := journal.ScanOrphans(tasksDir)
+	if err != nil || len(entries) == 0 {
+		return nil
+	}
+	var warnings []string
+	for _, e := range entries {
+		name := filepath.Base(e.TaskDir)
+		if rbErr := journal.Rollback(e); rbErr != nil {
+			warnings = append(warnings, fmt.Sprintf("partial recovery of orphaned task %q (crashed %s ago): %v",
+				name, time.Since(e.Started).Truncate(time.Second), rbErr))
+		} else {
+			warnings = append(warnings, fmt.Sprintf("recovered orphaned task %q (crashed %s ago)",
+				name, time.Since(e.Started).Truncate(time.Second)))
+		}
+	}
+	return warnings
+}
+
+// emitSweepWarningsStderr writes sweep warnings as plain-text `Warning: <msg>`
+// lines to cmd's stderr. Used by read-only commands; write-mutating commands
+// embed these in their JSON payload instead.
+func emitSweepWarningsStderr(cmd *cobra.Command, warnings []string) {
+	for _, w := range warnings {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", w)
+	}
 }
 
 // lockTask acquires the per-task advisory lock at

@@ -37,6 +37,10 @@ func runList(cmd *cobra.Command, _ []string) error {
 	useJSON, _ := cmd.Root().PersistentFlags().GetBool("json")
 
 	cfg := config.Load()
+
+	// Opportunistic orphan sweep (read-only path): emit warnings to stderr.
+	emitSweepWarningsStderr(cmd, sweepOrphans(cfg.TasksDir))
+
 	entries, err := collectTasks(cfg.TasksDir)
 	if err != nil {
 		return outputError(cmd, useJSON, err)

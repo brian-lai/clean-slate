@@ -37,6 +37,10 @@ func runClean(cmd *cobra.Command, args []string) error {
 	taskName := args[0]
 
 	cfg := config.Load()
+	// Opportunistic orphan sweep BEFORE acquiring the task lock (the orphan
+	// cleanup may free a stale lock for our target task).
+	sweepWarnings := sweepOrphans(cfg.TasksDir)
+
 	taskDir := filepath.Join(cfg.TasksDir, taskName)
 
 	if _, err := os.Stat(taskDir); os.IsNotExist(err) {
@@ -153,6 +157,9 @@ func runClean(cmd *cobra.Command, args []string) error {
 			return outputError(cmd, useJSON, fmt.Errorf("remove task dir: %w", err))
 		}
 	}
+
+	// Prepend orphan-sweep warnings to the task-level warnings.
+	warnings = append(sweepWarnings, warnings...)
 
 	if useJSON {
 		result := map[string]any{

@@ -30,6 +30,9 @@ func runAddContext(cmd *cobra.Command, args []string) error {
 	docPaths := args[1:]
 
 	cfg := config.Load()
+	// Opportunistic orphan sweep before touching per-task state.
+	sweepWarnings := sweepOrphans(cfg.TasksDir)
+
 	taskDir := filepath.Join(cfg.TasksDir, taskName)
 
 	if _, err := os.Stat(taskDir); os.IsNotExist(err) {
@@ -128,6 +131,9 @@ func runAddContext(cmd *cobra.Command, args []string) error {
 	if err := manifest.Write(task, taskDir); err != nil {
 		return outputError(cmd, useJSON, err)
 	}
+
+	// Prepend orphan-sweep warnings.
+	warnings = append(sweepWarnings, warnings...)
 
 	if useJSON {
 		result := map[string]any{
