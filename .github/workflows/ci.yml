@@ -30,3 +30,27 @@ jobs:
 
       - name: Verify version stamping
         run: ./bin/cs --version | grep -q "ci-${{ github.sha }}"
+
+  race:
+    name: go test -race (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run race detector
+        run: go test -race ./...
+
+  cross-compile-windows:
+    name: GOOS=windows go build (stub check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build for Windows
+        run: GOOS=windows go build ./...
