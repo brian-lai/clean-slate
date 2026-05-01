@@ -150,3 +150,87 @@ func TestReadNonExistent(t *testing.T) {
 		t.Errorf("Read nonexistent = %v, want os.ErrNotExist", err)
 	}
 }
+
+// TestWriteConcurrentReadersNeverSeePartial asserts the durability claim of
+// manifest.Write: a reader watching the file while a writer repeatedly
+// overwrites it should never observe a truncated or half-parsed JSON. After
+// Phase 1's atomicio swap, readers only see fully-new or fully-old content.
+func TestWriteConcurrentReadersNeverSeePartial(t *testing.T) {
+	dir := t.TempDir()
+
+	// Seed with valid content.
+	base := manifest.Task{
+		Name:        "race",
+		CreatedAt:   time.Now().UTC(),
+		Description: "race test",
+		Repos:       []manifest.RepoRef{},
+		ContextDocs: []string{},
+	}
+	if err := manifest.Write(base, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan struct{})
+	failures := make(chan error, 100)
+
+	// Reader goroutine: repeatedly parse task.json; any parse error is a failure.
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				if _, err := manifest.Read(dir); err != nil {
+					failures <- err
+				}
+			}
+		}
+	}()
+
+	// Writer: 100 overwrites with distinct descriptions.
+	for i := 0; i < 100; i++ {
+		task := base
+		task.Description = "write " + itoaManifest(i)
+		if err := manifest.Write(task, dir); err != nil {
+			close(done)
+			t.Fatalf("write i=%d: %v", i, err)
+		}
+	}
+	close(done)
+
+	select {
+	case err := <-failures:
+		t.Errorf("reader observed partial JSON during concurrent writes: %v", err)
+	default:
+		// no observed failures
+	}
+
+	// No tempfiles left behind.
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".tmp" || contains(e.Name(), ".tmp-") {
+			t.Errorf("leftover tempfile: %s", e.Name())
+		}
+	}
+}
+
+func itoaManifest(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var buf []byte
+	for n > 0 {
+		buf = append([]byte{byte('0' + n%10)}, buf...)
+		n /= 10
+	}
+	return string(buf)
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
