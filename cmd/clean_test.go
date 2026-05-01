@@ -1,9 +1,11 @@
 package cmd_test
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/brian-lai/clean-slate/internal/manifest"
@@ -74,7 +76,9 @@ func TestCleanLeavesNonWsBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, _, err := executeCmd(t, "clean", "weird-branch", "--force"); err != nil {
+	// In --json mode warnings are carried in the success payload, so assert via stdout.
+	stdout, _, err := executeCmd(t, "clean", "weird-branch", "--force", "--json")
+	if err != nil {
 		t.Fatalf("clean: %v", err)
 	}
 
@@ -83,6 +87,25 @@ func TestCleanLeavesNonWsBranch(t *testing.T) {
 	listOut, _ := listCmd.Output()
 	if len(listOut) == 0 {
 		t.Errorf("clean deleted non-ws/ branch 'keepme' that it should have preserved")
+	}
+
+	// The clean JSON payload must include a warning identifying why the branch
+	// delete was skipped. Silence on a tampered manifest would erase the audit trail.
+	var payload struct {
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("unmarshal clean --json: %v\n%s", err, stdout)
+	}
+	foundWarning := false
+	for _, w := range payload.Warnings {
+		if strings.Contains(w, "keepme") && strings.Contains(w, "not a ws/ branch") {
+			foundWarning = true
+			break
+		}
+	}
+	if !foundWarning {
+		t.Errorf("expected warning about non-ws/ branch skip; got warnings: %v", payload.Warnings)
 	}
 }
 

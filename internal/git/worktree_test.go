@@ -198,17 +198,24 @@ func TestDeleteBranch(t *testing.T) {
 	}
 }
 
-// TestDeleteBranchMissing verifies DeleteBranch returns a non-nil error with
-// the branch name included when the target branch doesn't exist. Callers
-// (cs clean) surface this as a warning rather than aborting.
+// TestDeleteBranchMissing verifies DeleteBranch returns a non-nil error that
+// includes both the branch name and git's own stderr explanation when the
+// target branch doesn't exist. Callers (cs clean) surface this as a warning
+// rather than aborting, so the message needs to be human-readable.
 func TestDeleteBranchMissing(t *testing.T) {
 	repo := initRepo(t, "main")
 	err := git.DeleteBranch(repo, "ws/nonexistent")
 	if err == nil {
 		t.Fatal("DeleteBranch on missing branch: expected error, got nil")
 	}
-	if !containsSubstrGit(err.Error(), "ws/nonexistent") {
+	msg := err.Error()
+	if !containsSubstrGit(msg, "ws/nonexistent") {
 		t.Errorf("error should mention branch name: %v", err)
+	}
+	// git's own explanation ("not found", "No such ref", etc.) should be
+	// captured in the wrapped message so callers can render an actionable warning.
+	if !containsSubstrGit(msg, "not found") && !containsSubstrGit(msg, "No such") {
+		t.Errorf("error should include git's stderr context; got: %v", err)
 	}
 }
 

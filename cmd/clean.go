@@ -112,10 +112,16 @@ func runClean(cmd *cobra.Command, args []string) error {
 		// Delete the ws/<task> branch in the source repo so repos don't
 		// accumulate abandoned task branches. Only delete branches that follow
 		// the ws/ convention cs itself writes; a manually-attached branch is
-		// left alone.
-		if wtOK && strings.HasPrefix(r.WorktreeBranch, "ws/") {
-			if err := git.DeleteBranch(r.Source, r.WorktreeBranch); err != nil {
-				warnings = append(warnings, fmt.Sprintf("delete branch %s: %v", r.WorktreeBranch, err))
+		// left alone with a warning so the user sees the audit trail.
+		// Note: git branch -D refuses to delete a currently-checked-out branch,
+		// so a racy checkout elsewhere surfaces as a warning rather than silent loss.
+		if wtOK {
+			if strings.HasPrefix(r.WorktreeBranch, "ws/") {
+				if err := git.DeleteBranch(r.Source, r.WorktreeBranch); err != nil {
+					warnings = append(warnings, fmt.Sprintf("delete branch %s: %v", r.WorktreeBranch, err))
+				}
+			} else {
+				warnings = append(warnings, fmt.Sprintf("skip branch delete for %s: not a ws/ branch (manifest may be tampered)", r.WorktreeBranch))
 			}
 		}
 	}
