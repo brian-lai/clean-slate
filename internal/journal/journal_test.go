@@ -1,0 +1,174 @@
+package journal_test
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/brian-lai/clean-slate/internal/journal"
+)
+
+func makeEntry(pid int, taskDir string) journal.Entry {
+	return journal.Entry{
+		Op:        "create",
+		PID:       pid,
+		Started:   time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC),
+		TaskDir:   taskDir,
+		Worktrees: []string{filepath.Join(taskDir, "repo-a")},
+		Branches: []journal.BranchRef{
+			{RepoPath: "/projects/repos/repo-a", Branch: "ws/test"},
+		},
+	}
+}
+
+func TestWriteReadRoundtrip(t *testing.T) {
+	taskDir := t.TempDir()
+	in := makeEntry(os.Getpid(), taskDir)
+
+	if err := journal.Write(taskDir, in); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	out, ok, err := journal.Read(taskDir, in.PID)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if !ok {
+		t.Fatal("Read: expected journal present, got false")
+	}
+
+	if out.Op != in.Op || out.PID != in.PID || out.TaskDir != in.TaskDir {
+		t.Errorf("top-level mismatch: got %+v want %+v", out, in)
+	}
+	if !out.Started.Equal(in.Started) {
+		t.Errorf("Started mismatch: got %v want %v", out.Started, in.Started)
+	}
+	if len(out.Worktrees) != 1 || out.Worktrees[0] != in.Worktrees[0] {
+		t.Errorf("Worktrees mismatch: got %v want %v", out.Worktrees, in.Worktrees)
+	}
+	if len(out.Branches) != 1 || out.Branches[0] != in.Branches[0] {
+		t.Errorf("Branches mismatch: got %v want %v", out.Branches, in.Branches)
+	}
+}
+
+// TestPerPIDIsolation verifies that two different PIDs writing to the same
+// taskDir produce disjoint files. This is the design property that makes
+// Phase 1 safely shippable standalone (before the Phase 2 lock exists).
+func TestPerPIDIsolation(t *testing.T) {
+	taskDir := t.TempDir()
+	a := makeEntry(1001, taskDir)
+	a.Op = "create-by-a"
+	b := makeEntry(1002, taskDir)
+	b.Op = "create-by-b"
+
+	if err := journal.Write(taskDir, a); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.Write(taskDir, b); err != nil {
+		t.Fatal(err)
+	}
+
+	gotA, okA, err := journal.Read(taskDir, 1001)
+	if err != nil || !okA {
+		t.Fatalf("Read A: ok=%v err=%v", okA, err)
+	}
+	gotB, okB, err := journal.Read(taskDir, 1002)
+	if err != nil || !okB {
+		t.Fatalf("Read B: ok=%v err=%v", okB, err)
+	}
+	if gotA.Op != "create-by-a" {
+		t.Errorf("A.Op = %q, want create-by-a", gotA.Op)
+	}
+	if gotB.Op != "create-by-b" {
+		t.Errorf("B.Op = %q, want create-by-b", gotB.Op)
+	}
+
+	// On disk: both journal files exist.
+	entries, _ := os.ReadDir(taskDir)
+	var journalCount int
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".cs-journal.") {
+			journalCount++
+		}
+	}
+	if journalCount != 2 {
+		t.Errorf("expected 2 per-PID journals, got %d", journalCount)
+	}
+}
+
+func TestReadMissingReturnsFalseNoError(t *testing.T) {
+	taskDir := t.TempDir()
+	e, ok, err := journal.Read(taskDir, 999)
+	if err != nil {
+		t.Errorf("Read missing: want nil error, got %v", err)
+	}
+	if ok {
+		t.Error("Read missing: want ok=false, got true")
+	}
+	if e.PID != 0 {
+		t.Errorf("Read missing: want zero-value Entry, got %+v", e)
+	}
+}
+
+func TestClearIdempotent(t *testing.T) {
+	taskDir := t.TempDir()
+	e := makeEntry(42, taskDir)
+
+	// Clear before Write — no error.
+	if err := journal.Clear(taskDir, 42); err != nil {
+		t.Errorf("Clear on missing: %v", err)
+	}
+
+	// Write then Clear.
+	if err := journal.Write(taskDir, e); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.Clear(taskDir, 42); err != nil {
+		t.Errorf("Clear after Write: %v", err)
+	}
+	_, ok, _ := journal.Read(taskDir, 42)
+	if ok {
+		t.Error("journal file still present after Clear")
+	}
+
+	// Second Clear — no error.
+	if err := journal.Clear(taskDir, 42); err != nil {
+		t.Errorf("double Clear: %v", err)
+	}
+}
+
+// TestClearIsolatedByPID verifies that Clearing one PID's journal does NOT
+// touch another PID's journal in the same taskDir.
+func TestClearIsolatedByPID(t *testing.T) {
+	taskDir := t.TempDir()
+	a := makeEntry(1001, taskDir)
+	b := makeEntry(1002, taskDir)
+	journal.Write(taskDir, a)
+	journal.Write(taskDir, b)
+
+	if err := journal.Clear(taskDir, 1001); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok, _ := journal.Read(taskDir, 1001); ok {
+		t.Error("1001 journal should be gone")
+	}
+	if _, ok, _ := journal.Read(taskDir, 1002); !ok {
+		t.Error("1002 journal should still exist")
+	}
+}
+
+// TestWriteUsesAtomicIO — no .tmp-* siblings after Write.
+func TestWriteUsesAtomicIO(t *testing.T) {
+	taskDir := t.TempDir()
+	if err := journal.Write(taskDir, makeEntry(7, taskDir)); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := os.ReadDir(taskDir)
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tmp-") {
+			t.Errorf("leftover tempfile: %s", e.Name())
+		}
+	}
+}
