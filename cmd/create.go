@@ -8,12 +8,22 @@ import (
 
 	"github.com/brian-lai/clean-slate/internal/config"
 	"github.com/brian-lai/clean-slate/internal/git"
+	"github.com/brian-lai/clean-slate/internal/journal"
 	"github.com/brian-lai/clean-slate/internal/manifest"
 	"github.com/brian-lai/clean-slate/internal/tui"
 	"github.com/brian-lai/clean-slate/internal/workspace"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
+
+// createAfterJournalHook is a test-only seam. When non-nil, runCreate invokes
+// it immediately after the first journal.Write so tests can deterministically
+// observe mid-operation filesystem state. Do NOT use this in production code.
+var createAfterJournalHook func()
+
+// SetCreateAfterJournalHook installs a test hook that fires inside runCreate
+// right after the first journal.Write. Pass nil to clear.
+func SetCreateAfterJournalHook(fn func()) { createAfterJournalHook = fn }
 
 type createResult struct {
 	Task     manifest.Task `json:"task"`
@@ -100,13 +110,35 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		return outputError(cmd, useJSON, err)
 	}
 
-	// Track created worktrees so we can roll back on failure.
+	// Track created worktrees so we can roll back on failure. The journal
+	// below captures the same list to disk so Phase 2's orphan sweep can
+	// reverse the operation even after this process is killed.
 	var addedWorktrees []string
+	journalEntry := journal.Entry{
+		Op:        "create",
+		PID:       os.Getpid(),
+		Started:   time.Now().UTC(),
+		TaskDir:   taskDir,
+		Worktrees: []string{},
+		Branches:  []journal.BranchRef{},
+	}
+
 	rollback := func() {
 		for _, wt := range addedWorktrees {
 			_ = git.RemoveWorktree(wt)
 		}
 		_ = os.RemoveAll(taskDir)
+		_ = journal.Clear(taskDir, journalEntry.PID)
+	}
+
+	// Seed the journal with the empty operation so a SIGKILL mid-worktree-add
+	// still leaves a recoverable record.
+	if err := journal.Write(taskDir, journalEntry); err != nil {
+		rollback()
+		return outputError(cmd, useJSON, err)
+	}
+	if createAfterJournalHook != nil {
+		createAfterJournalHook()
 	}
 
 	repos := []manifest.RepoRef{}
@@ -121,6 +153,20 @@ func runCreate(cmd *cobra.Command, args []string) error {
 			continue
 		}
 		addedWorktrees = append(addedWorktrees, worktreeDest)
+
+		// Re-journal after each successful worktree add so the orphan sweep
+		// sees the current set of side effects.
+		journalEntry.Worktrees = append(journalEntry.Worktrees, worktreeDest)
+		journalEntry.Branches = append(journalEntry.Branches, journal.BranchRef{
+			RepoPath: repoPath,
+			Branch:   branchName,
+		})
+		if jErr := journal.Write(taskDir, journalEntry); jErr != nil {
+			// A failing journal update post-side-effect is a real risk to
+			// durability — roll back rather than persist an unrecoverable state.
+			rollback()
+			return outputError(cmd, useJSON, fmt.Errorf("update journal: %w", jErr))
+		}
 
 		repos = append(repos, manifest.RepoRef{
 			Name:           repoName,
@@ -150,6 +196,12 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	if err := manifest.Write(task, taskDir); err != nil {
 		rollback()
 		return outputError(cmd, useJSON, err)
+	}
+
+	// Task is legitimate; clear the journal. A failing Clear is recoverable
+	// (Phase 2 sweep will tidy up) — log to warnings but don't fail create.
+	if err := journal.Clear(taskDir, journalEntry.PID); err != nil {
+		warnings = append(warnings, fmt.Sprintf("clear journal: %v", err))
 	}
 
 	if warnings == nil {
