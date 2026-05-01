@@ -7,15 +7,17 @@
 // concurrent cs processes never corrupt each other's journal even before the
 // Phase 2 lock is wired in. ScanOrphans globs `.cs-journal.*` to discover
 // journals from any PID and filters by process liveness.
-//
-// Stub: signatures match the spec at
-// context/data/2026-05-01-durable-concurrent-cs-spec.yaml. Phase 1 implements
-// Write/Clear/Read; Phase 2 implements ScanOrphans/Rollback.
 package journal
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"time"
+
+	"github.com/brian-lai/clean-slate/internal/atomicio"
 )
 
 // Entry is the on-disk journal record, serialized as JSON.
@@ -34,21 +36,44 @@ type BranchRef struct {
 	Branch   string `json:"branch"`
 }
 
+func journalPath(taskDir string, pid int) string {
+	return filepath.Join(taskDir, fmt.Sprintf(".cs-journal.%d", pid))
+}
+
 // Write overwrites `<taskDir>/.cs-journal.<e.PID>` with e via atomicio.
 func Write(taskDir string, e Entry) error {
-	return errors.New("journal.Write: not implemented")
+	data, err := json.MarshalIndent(e, "", "  ")
+	if err != nil {
+		return fmt.Errorf("journal: marshal entry: %w", err)
+	}
+	return atomicio.WriteFile(journalPath(taskDir, e.PID), data, 0644)
 }
 
 // Clear removes `<taskDir>/.cs-journal.<pid>`. No-op if the file does not exist.
 func Clear(taskDir string, pid int) error {
-	return errors.New("journal.Clear: not implemented")
+	err := os.Remove(journalPath(taskDir, pid))
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("journal: clear: %w", err)
+	}
+	return nil
 }
 
 // Read returns the journal entry at `<taskDir>/.cs-journal.<pid>`, a
 // present-flag, and any read/parse error. (false, nil) means "no journal
 // for that PID on disk" (the happy post-clear state).
 func Read(taskDir string, pid int) (Entry, bool, error) {
-	return Entry{}, false, errors.New("journal.Read: not implemented")
+	data, err := os.ReadFile(journalPath(taskDir, pid))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Entry{}, false, nil
+		}
+		return Entry{}, false, fmt.Errorf("journal: read: %w", err)
+	}
+	var e Entry
+	if err := json.Unmarshal(data, &e); err != nil {
+		return Entry{}, false, fmt.Errorf("journal: parse: %w", err)
+	}
+	return e, true, nil
 }
 
 // ScanOrphans globs `.cs-journal.*` under each top-level task dir in tasksDir
