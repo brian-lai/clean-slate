@@ -37,6 +37,13 @@ func runAddContext(cmd *cobra.Command, args []string) error {
 		return outputError(cmd, useJSON, werr)
 	}
 
+	// Per-task lock — add-context is a read-modify-write on task.json.
+	lock, err := lockTask(cfg.TasksDir, taskName)
+	if err != nil {
+		return outputError(cmd, useJSON, err)
+	}
+	defer lock.Release()
+
 	task, err := manifest.Read(taskDir)
 	if err != nil {
 		return outputError(cmd, useJSON, err)

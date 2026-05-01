@@ -20,8 +20,6 @@ import (
 // This test exists as a skeleton from Phase 2 step 1 and is skipped until
 // step 9 wires the lock into runCreate. The skip is removed in that commit.
 func TestE2EAgentRaceSmoke(t *testing.T) {
-	t.Skip("TestE2EAgentRaceSmoke: pending Phase 2 step 9 lock wire-in")
-
 	// Build the binary to a tempdir.
 	repoRoot := findRepoRoot(t)
 	binPath := filepath.Join(t.TempDir(), "cs")

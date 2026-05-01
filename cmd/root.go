@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"time"
 
+	"github.com/brian-lai/clean-slate/internal/cslock"
 	"github.com/brian-lai/clean-slate/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -137,4 +140,26 @@ func outputError(cmd *cobra.Command, useJSON bool, err error) error {
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+}
+
+// lockTask acquires the per-task advisory lock at
+// <tasksDir>/.cs-locks/<taskname>.lock. On contention it returns a
+// CLI-friendly error shaped for v0.2.0: "task %q is locked by PID %d
+// (started %s ago)" — or "an unknown process" when the race-with-writer
+// payload window yielded no PID. Callers defer lock.Release().
+func lockTask(tasksDir, taskName string) (*cslock.Lock, error) {
+	lockPath := filepath.Join(tasksDir, ".cs-locks", taskName+".lock")
+	lock, err := cslock.Acquire(lockPath)
+	if err != nil {
+		var locked *cslock.ErrLocked
+		if errors.As(err, &locked) {
+			if locked.Info.PID == -1 {
+				return nil, fmt.Errorf("task %q is locked by an unknown process", taskName)
+			}
+			return nil, fmt.Errorf("task %q is locked by PID %d (started %s ago)",
+				taskName, locked.Info.PID, time.Since(locked.Info.Started).Truncate(time.Second))
+		}
+		return nil, err
+	}
+	return lock, nil
 }

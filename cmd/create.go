@@ -103,6 +103,16 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	cfg := config.Load()
 
+	// Acquire the per-task advisory lock BEFORE workspace.Create. Lock lives
+	// at <tasksDir>/.cs-locks/<taskname>.lock — outside the task dir so its
+	// lifecycle is independent of workspace.Create's existence check and a
+	// losing racer never creates an orphan task dir.
+	lock, err := lockTask(cfg.TasksDir, taskName)
+	if err != nil {
+		return outputError(cmd, useJSON, err)
+	}
+	defer lock.Release()
+
 	// Create workspace directory and copy context docs.
 	// copiedDocs is the list of docs that actually landed on disk (relative paths).
 	taskDir, copiedDocs, warnings, err := workspace.Create(cfg.TasksDir, taskName, createContextDoc)
