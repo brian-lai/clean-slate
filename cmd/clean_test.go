@@ -1,10 +1,14 @@
 package cmd_test
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/brian-lai/clean-slate/internal/manifest"
 )
 
 func TestCleanRemovesWorktrees(t *testing.T) {
@@ -32,6 +36,76 @@ func TestCleanRemovesWorktrees(t *testing.T) {
 	out, _ := cmd.Output()
 	if containsString(string(out), "clean-me") {
 		t.Errorf("git worktree list still shows clean-me: %s", out)
+	}
+
+	// The ws/clean-me branch should also be deleted from the source repo so that
+	// repos don't accumulate abandoned task branches over time.
+	branchCmd := exec.Command("git", "branch", "--list", "ws/clean-me")
+	branchCmd.Dir = repoDir
+	branchOut, _ := branchCmd.Output()
+	if len(branchOut) != 0 {
+		t.Errorf("ws/clean-me branch still exists after clean: %q", branchOut)
+	}
+}
+
+// TestCleanLeavesNonWsBranch verifies that if the manifest references a branch
+// that doesn't match the ws/* convention (e.g., manually tampered), clean
+// leaves the branch alone rather than deleting it. cs create always writes
+// ws/<name>, but we don't assume the manifest is trustworthy for destructive ops.
+func TestCleanLeavesNonWsBranch(t *testing.T) {
+	tasksDir := t.TempDir()
+	reposDir := t.TempDir()
+	t.Setenv("CS_TASKS_DIR", tasksDir)
+	t.Setenv("CS_REPOS_DIR", reposDir)
+
+	taskDir, _ := setupTaskWithWorktree(t, tasksDir, reposDir, "weird-branch", "repo-weird")
+	repoDir := filepath.Join(reposDir, "repo-weird")
+
+	keepCmd := exec.Command("git", "branch", "keepme")
+	keepCmd.Dir = repoDir
+	if out, err := keepCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git branch keepme: %v\n%s", err, out)
+	}
+
+	task, err := manifest.Read(taskDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.Repos[0].WorktreeBranch = "keepme"
+	if err := manifest.Write(task, taskDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// In --json mode warnings are carried in the success payload, so assert via stdout.
+	stdout, _, err := executeCmd(t, "clean", "weird-branch", "--force", "--json")
+	if err != nil {
+		t.Fatalf("clean: %v", err)
+	}
+
+	listCmd := exec.Command("git", "branch", "--list", "keepme")
+	listCmd.Dir = repoDir
+	listOut, _ := listCmd.Output()
+	if len(listOut) == 0 {
+		t.Errorf("clean deleted non-ws/ branch 'keepme' that it should have preserved")
+	}
+
+	// The clean JSON payload must include a warning identifying why the branch
+	// delete was skipped. Silence on a tampered manifest would erase the audit trail.
+	var payload struct {
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("unmarshal clean --json: %v\n%s", err, stdout)
+	}
+	foundWarning := false
+	for _, w := range payload.Warnings {
+		if strings.Contains(w, "keepme") && strings.Contains(w, "not a ws/ branch") {
+			foundWarning = true
+			break
+		}
+	}
+	if !foundWarning {
+		t.Errorf("expected warning about non-ws/ branch skip; got warnings: %v", payload.Warnings)
 	}
 }
 

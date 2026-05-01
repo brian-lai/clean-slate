@@ -64,16 +64,14 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		if useJSON || !isatty.IsTerminal(os.Stdin.Fd()) {
 			// Headless/piped mode: cannot prompt, must error.
 			err := fmt.Errorf("missing required input(s): %v (provide via flags or run in a TTY for interactive prompts)", needed)
-			outputError(cmd, useJSON, err)
-			return err
+			return outputError(cmd, useJSON, err)
 		}
 
 		cfg := config.Load()
 		repoNames, _ := git.ListRepos(cfg.ReposDir) // error is non-fatal; empty list is fine
 		filled, err := tui.PromptCreate(repoNames, inputs)
 		if err != nil {
-			outputError(cmd, useJSON, err)
-			return err
+			return outputError(cmd, useJSON, err)
 		}
 		inputs = filled
 	}
@@ -86,13 +84,11 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	// Pre-validate inputs that can be checked without side effects.
 	if err := manifest.ValidateName(taskName); err != nil {
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 	if createDesc == "" {
 		err := manifest.ErrDescriptionRequired
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 
 	cfg := config.Load()
@@ -101,8 +97,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	// copiedDocs is the list of docs that actually landed on disk (relative paths).
 	taskDir, copiedDocs, warnings, err := workspace.Create(cfg.TasksDir, taskName, createContextDoc)
 	if err != nil {
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 
 	// Track created worktrees so we can roll back on failure.
@@ -150,13 +145,11 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 	if err := manifest.Validate(task); err != nil {
 		rollback()
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 	if err := manifest.Write(task, taskDir); err != nil {
 		rollback()
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 
 	if warnings == nil {

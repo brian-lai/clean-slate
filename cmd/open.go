@@ -30,8 +30,7 @@ func runOpen(cmd *cobra.Command, args []string) error {
 
 	if _, err := os.Stat(taskDir); os.IsNotExist(err) {
 		werr := fmt.Errorf("task %q not found at %s", taskName, taskDir)
-		outputError(cmd, useJSON, werr)
-		return werr
+		return outputError(cmd, useJSON, werr)
 	}
 
 	if useJSON {
@@ -42,8 +41,7 @@ func runOpen(cmd *cobra.Command, args []string) error {
 
 	fallback, err := terminal.Launch(taskDir)
 	if err != nil {
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 	if fallback != "" {
 		fmt.Fprintln(cmd.OutOrStdout(), fallback)

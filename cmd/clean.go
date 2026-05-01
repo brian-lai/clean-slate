@@ -41,14 +41,12 @@ func runClean(cmd *cobra.Command, args []string) error {
 
 	if _, err := os.Stat(taskDir); os.IsNotExist(err) {
 		werr := fmt.Errorf("task %q not found at %s", taskName, taskDir)
-		outputError(cmd, useJSON, werr)
-		return werr
+		return outputError(cmd, useJSON, werr)
 	}
 
 	task, err := manifest.Read(taskDir)
 	if err != nil {
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 
 	// If not forced, check for dirty worktrees first
@@ -64,8 +62,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 		}
 		if len(dirty) > 0 {
 			werr := fmt.Errorf("worktrees have uncommitted changes: %s (use --force to override)", strings.Join(dirty, ", "))
-			outputError(cmd, useJSON, werr)
-			return werr
+			return outputError(cmd, useJSON, werr)
 		}
 	}
 
@@ -75,8 +72,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 	if !cleanForce {
 		if !isInteractive {
 			werr := fmt.Errorf("--force is required in non-interactive mode")
-			outputError(cmd, useJSON, werr)
-			return werr
+			return outputError(cmd, useJSON, werr)
 		}
 
 		action := "remove"
@@ -91,8 +87,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 			Negative("Cancel").
 			Value(&confirmed)
 		if err := prompt.Run(); err != nil {
-			outputError(cmd, useJSON, err)
-			return err
+			return outputError(cmd, useJSON, err)
 		}
 		if !confirmed {
 			fmt.Fprintln(cmd.OutOrStdout(), "Cancelled.")
@@ -100,16 +95,34 @@ func runClean(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Remove each worktree; collect warnings but keep going on individual failures
+	// Remove each worktree and its task branch; collect warnings but keep going
+	// on individual failures.
 	var warnings []string
 	for _, r := range task.Repos {
 		wt := filepath.Join(taskDir, r.WorktreePath)
+
+		wtOK := true
 		if _, err := os.Stat(wt); os.IsNotExist(err) {
-			// Already gone; skip silently
-			continue
-		}
-		if err := git.RemoveWorktree(wt); err != nil {
+			// Already gone on disk; still attempt branch cleanup below.
+		} else if err := git.RemoveWorktree(wt); err != nil {
 			warnings = append(warnings, fmt.Sprintf("remove worktree %s: %v", r.Name, err))
+			wtOK = false
+		}
+
+		// Delete the ws/<task> branch in the source repo so repos don't
+		// accumulate abandoned task branches. Only delete branches that follow
+		// the ws/ convention cs itself writes; a manually-attached branch is
+		// left alone with a warning so the user sees the audit trail.
+		// Note: git branch -D refuses to delete a currently-checked-out branch,
+		// so a racy checkout elsewhere surfaces as a warning rather than silent loss.
+		if wtOK {
+			if strings.HasPrefix(r.WorktreeBranch, "ws/") {
+				if err := git.DeleteBranch(r.Source, r.WorktreeBranch); err != nil {
+					warnings = append(warnings, fmt.Sprintf("delete branch %s: %v", r.WorktreeBranch, err))
+				}
+			} else {
+				warnings = append(warnings, fmt.Sprintf("skip branch delete for %s: not a ws/ branch (manifest may be tampered)", r.WorktreeBranch))
+			}
 		}
 	}
 
@@ -122,18 +135,15 @@ func runClean(cmd *cobra.Command, args []string) error {
 	if cleanArchive {
 		archiveDir := filepath.Join(cfg.TasksDir, "_archive")
 		if err := os.MkdirAll(archiveDir, 0755); err != nil {
-			outputError(cmd, useJSON, fmt.Errorf("create archive dir: %w", err))
-			return err
+			return outputError(cmd, useJSON, fmt.Errorf("create archive dir: %w", err))
 		}
 		dest := filepath.Join(archiveDir, taskName)
 		if err := os.Rename(taskDir, dest); err != nil {
-			outputError(cmd, useJSON, fmt.Errorf("archive task: %w", err))
-			return err
+			return outputError(cmd, useJSON, fmt.Errorf("archive task: %w", err))
 		}
 	} else {
 		if err := os.RemoveAll(taskDir); err != nil {
-			outputError(cmd, useJSON, fmt.Errorf("remove task dir: %w", err))
-			return err
+			return outputError(cmd, useJSON, fmt.Errorf("remove task dir: %w", err))
 		}
 	}
 

@@ -31,17 +31,14 @@ func runInfo(cmd *cobra.Command, args []string) error {
 	if _, err := os.Stat(taskDir); err != nil {
 		if os.IsNotExist(err) {
 			werr := fmt.Errorf("task %q not found at %s", taskName, taskDir)
-			outputError(cmd, useJSON, werr)
-			return werr
+			return outputError(cmd, useJSON, werr)
 		}
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 
 	task, err := manifest.Read(taskDir)
 	if err != nil {
-		outputError(cmd, useJSON, fmt.Errorf("read manifest for %q: %w", taskName, err))
-		return err
+		return outputError(cmd, useJSON, fmt.Errorf("read manifest for %q: %w", taskName, err))
 	}
 
 	if useJSON {

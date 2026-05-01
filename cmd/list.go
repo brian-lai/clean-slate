@@ -39,8 +39,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 	cfg := config.Load()
 	entries, err := collectTasks(cfg.TasksDir)
 	if err != nil {
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 
 	// Always sort by CreatedAt descending (newest first)

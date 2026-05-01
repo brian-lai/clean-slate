@@ -158,6 +158,76 @@ func TestWorktreeRemove(t *testing.T) {
 	}
 }
 
+// TestDeleteBranch verifies that DeleteBranch removes a local branch from a repo,
+// including unmerged branches (cs clean semantics: the user has already confirmed
+// destruction via --force or the interactive prompt).
+func TestDeleteBranch(t *testing.T) {
+	repo := initRepo(t, "main")
+
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("checkout", "-b", "ws/delete-me")
+	if err := os.WriteFile(filepath.Join(repo, "diverge.txt"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", ".")
+	run("commit", "-m", "unmerged work")
+	run("checkout", "main")
+
+	listOut, err := exec.Command("git", "-C", repo, "branch", "--list", "ws/delete-me").Output()
+	if err != nil || len(listOut) == 0 {
+		t.Fatalf("pre-check: ws/delete-me should exist, got %q (%v)", listOut, err)
+	}
+
+	if err := git.DeleteBranch(repo, "ws/delete-me"); err != nil {
+		t.Fatalf("DeleteBranch: %v", err)
+	}
+
+	listOut, err = exec.Command("git", "-C", repo, "branch", "--list", "ws/delete-me").Output()
+	if err != nil {
+		t.Fatalf("post-list: %v", err)
+	}
+	if len(listOut) != 0 {
+		t.Errorf("DeleteBranch left branch behind: %q", listOut)
+	}
+}
+
+// TestDeleteBranchMissing verifies DeleteBranch returns a non-nil error that
+// includes both the branch name and git's own stderr explanation when the
+// target branch doesn't exist. Callers (cs clean) surface this as a warning
+// rather than aborting, so the message needs to be human-readable.
+func TestDeleteBranchMissing(t *testing.T) {
+	repo := initRepo(t, "main")
+	err := git.DeleteBranch(repo, "ws/nonexistent")
+	if err == nil {
+		t.Fatal("DeleteBranch on missing branch: expected error, got nil")
+	}
+	msg := err.Error()
+	if !containsSubstrGit(msg, "ws/nonexistent") {
+		t.Errorf("error should mention branch name: %v", err)
+	}
+	// git's own explanation ("not found", "No such ref", etc.) should be
+	// captured in the wrapped message so callers can render an actionable warning.
+	if !containsSubstrGit(msg, "not found") && !containsSubstrGit(msg, "No such") {
+		t.Errorf("error should include git's stderr context; got: %v", err)
+	}
+}
+
+func containsSubstrGit(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 func TestListRepos(t *testing.T) {
 	reposDir := t.TempDir()
 

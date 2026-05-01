@@ -79,3 +79,14 @@ when it expires.
 
 Pre-1.0 the bar for minor bumps is looser; breaking changes can still land
 in minor versions if called out clearly in the release notes.
+
+## Changelog
+
+Human-written one-liners per release. GitHub's auto-generated release notes
+cover the full commit list; these are just the headline.
+
+- **v0.1.4** — Show actionable errors on wrong arg counts (human + JSON); delete `ws/` branches when cleaning tasks so source repos don't accumulate abandoned branches.
+- **v0.1.3** — First fully-sanitized public release.
+- **v0.1.2** — Sanitized repo author metadata via history rewrite.
+- **v0.1.1** — Release automation verified end-to-end.
+- **v0.1.0** — Initial public release via `brew install brian-lai/tap/clean-slate`.

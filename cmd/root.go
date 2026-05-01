@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,12 @@ import (
 	"github.com/brian-lai/clean-slate/internal/version"
 	"github.com/spf13/cobra"
 )
+
+// errReported marks errors that a RunE handler has already emitted to
+// stdout/stderr via outputError. The top-level Execute seam uses errors.Is
+// to skip re-reporting those — so Cobra-produced errors (wrong arg count,
+// unknown flags) still get formatted, while per-command errors don't double-print.
+var errReported = errors.New("cs: error already reported")
 
 var jsonOutput bool
 var outWriter io.Writer = os.Stdout
@@ -24,9 +31,12 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+	err := rootCmd.Execute()
+	if err == nil {
+		return
 	}
+	reportIfNeeded(err)
+	os.Exit(1)
 }
 
 // ExecuteArgs is used in tests to invoke the CLI with specific args.
@@ -34,7 +44,23 @@ func ExecuteArgs(args []string) error {
 	rootCmd.SetArgs(args)
 	rootCmd.SetOut(outWriter)
 	rootCmd.SetErr(errWriter)
-	return rootCmd.Execute()
+	err := rootCmd.Execute()
+	if err != nil {
+		reportIfNeeded(err)
+	}
+	return err
+}
+
+// reportIfNeeded emits an error that no RunE has already handled. Errors from
+// Cobra itself (arg-count, unknown flag, unknown subcommand) reach this seam
+// unwrapped because SilenceErrors=true on rootCmd stops Cobra from printing
+// them — we format them ourselves so the JSON contract holds in --json mode.
+func reportIfNeeded(err error) {
+	if errors.Is(err, errReported) {
+		return
+	}
+	useJSON, _ := rootCmd.PersistentFlags().GetBool("json")
+	outputError(rootCmd, useJSON, err)
 }
 
 // SetOutput redirects stdout/stderr for testing.
@@ -97,13 +123,16 @@ func outputJSON(cmd *cobra.Command, v any) error {
 
 // outputError writes the error to the command's stderr writer.
 // In JSON mode: a JSON {"error": "..."} object. Otherwise: plain "Error: ...".
-func outputError(cmd *cobra.Command, useJSON bool, err error) {
+// The returned value wraps err with errReported so reportIfNeeded at the
+// Execute seam skips it, avoiding double-printing.
+func outputError(cmd *cobra.Command, useJSON bool, err error) error {
 	if useJSON {
 		data, _ := json.Marshal(map[string]string{"error": err.Error()})
 		fmt.Fprintln(cmd.ErrOrStderr(), string(data))
 	} else {
 		fmt.Fprintln(cmd.ErrOrStderr(), "Error:", err.Error())
 	}
+	return fmt.Errorf("%w: %w", errReported, err)
 }
 
 func init() {
