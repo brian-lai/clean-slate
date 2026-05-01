@@ -263,3 +263,77 @@ func TestScanOrphansMultiplePIDsPerTaskDir(t *testing.T) {
 		t.Errorf("orphan PID = %d, want %d", orphans[0].PID, dp)
 	}
 }
+
+// TestRollbackRemovesWorktreesAndBranches exercises the full rollback sweep
+// against a real git repo + real worktree + real branch.
+func TestRollbackRemovesWorktreesAndBranches(t *testing.T) {
+	reposDir := t.TempDir()
+	tasksDir := t.TempDir()
+
+	repoPath := filepath.Join(reposDir, "repo-rb")
+	if err := os.MkdirAll(repoPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	run := func(dir string, args ...string) {
+		c := exec.Command("git", args...)
+		c.Dir = dir
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run(repoPath, "init", "-b", "main")
+	run(repoPath, "config", "user.email", "test@test.com")
+	run(repoPath, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(repoPath, "README.md"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run(repoPath, "add", ".")
+	run(repoPath, "commit", "-m", "init")
+
+	taskDir := filepath.Join(tasksDir, "rb-task")
+	if err := os.MkdirAll(taskDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	worktreeDest := filepath.Join(taskDir, "repo-rb")
+	run(repoPath, "worktree", "add", worktreeDest, "-b", "ws/rb-task", "main")
+
+	entry := journal.Entry{
+		Op:        "create",
+		PID:       os.Getpid(),
+		Started:   time.Now().UTC(),
+		TaskDir:   taskDir,
+		Worktrees: []string{worktreeDest},
+		Branches:  []journal.BranchRef{{RepoPath: repoPath, Branch: "ws/rb-task"}},
+	}
+
+	if err := journal.Rollback(entry); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+
+	if _, err := os.Stat(worktreeDest); !os.IsNotExist(err) {
+		t.Errorf("worktree should be removed")
+	}
+	if _, err := os.Stat(taskDir); !os.IsNotExist(err) {
+		t.Errorf("task dir should be removed")
+	}
+
+	listOut, _ := exec.Command("git", "-C", repoPath, "branch", "--list", "ws/rb-task").Output()
+	if len(listOut) != 0 {
+		t.Errorf("ws/rb-task branch should be deleted, got: %s", listOut)
+	}
+}
+
+// TestRollbackIgnoresNonWsBranch verifies that Rollback does NOT touch a
+// branch whose name doesn't start with ws/ — defense-in-depth against a
+// tampered or corrupted journal.
+func TestRollbackIgnoresNonWsBranch(t *testing.T) {
+	entry := journal.Entry{
+		TaskDir: t.TempDir(),
+		Branches: []journal.BranchRef{
+			{RepoPath: "/nonexistent", Branch: "keepme"},
+		},
+	}
+	if err := journal.Rollback(entry); err != nil {
+		t.Errorf("Rollback should ignore non-ws/ branch, got error: %v", err)
+	}
+}
