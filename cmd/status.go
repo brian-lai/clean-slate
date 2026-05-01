@@ -56,14 +56,12 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	if _, err := os.Stat(taskDir); os.IsNotExist(err) {
 		werr := fmt.Errorf("task %q not found at %s", taskName, taskDir)
-		outputError(cmd, useJSON, werr)
-		return werr
+		return outputError(cmd, useJSON, werr)
 	}
 
 	task, err := manifest.Read(taskDir)
 	if err != nil {
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 
 	var repos []repoStatus

@@ -41,14 +41,12 @@ func runClean(cmd *cobra.Command, args []string) error {
 
 	if _, err := os.Stat(taskDir); os.IsNotExist(err) {
 		werr := fmt.Errorf("task %q not found at %s", taskName, taskDir)
-		outputError(cmd, useJSON, werr)
-		return werr
+		return outputError(cmd, useJSON, werr)
 	}
 
 	task, err := manifest.Read(taskDir)
 	if err != nil {
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 
 	// If not forced, check for dirty worktrees first
@@ -64,8 +62,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 		}
 		if len(dirty) > 0 {
 			werr := fmt.Errorf("worktrees have uncommitted changes: %s (use --force to override)", strings.Join(dirty, ", "))
-			outputError(cmd, useJSON, werr)
-			return werr
+			return outputError(cmd, useJSON, werr)
 		}
 	}
 
@@ -75,8 +72,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 	if !cleanForce {
 		if !isInteractive {
 			werr := fmt.Errorf("--force is required in non-interactive mode")
-			outputError(cmd, useJSON, werr)
-			return werr
+			return outputError(cmd, useJSON, werr)
 		}
 
 		action := "remove"
@@ -91,8 +87,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 			Negative("Cancel").
 			Value(&confirmed)
 		if err := prompt.Run(); err != nil {
-			outputError(cmd, useJSON, err)
-			return err
+			return outputError(cmd, useJSON, err)
 		}
 		if !confirmed {
 			fmt.Fprintln(cmd.OutOrStdout(), "Cancelled.")
@@ -134,18 +129,15 @@ func runClean(cmd *cobra.Command, args []string) error {
 	if cleanArchive {
 		archiveDir := filepath.Join(cfg.TasksDir, "_archive")
 		if err := os.MkdirAll(archiveDir, 0755); err != nil {
-			outputError(cmd, useJSON, fmt.Errorf("create archive dir: %w", err))
-			return err
+			return outputError(cmd, useJSON, fmt.Errorf("create archive dir: %w", err))
 		}
 		dest := filepath.Join(archiveDir, taskName)
 		if err := os.Rename(taskDir, dest); err != nil {
-			outputError(cmd, useJSON, fmt.Errorf("archive task: %w", err))
-			return err
+			return outputError(cmd, useJSON, fmt.Errorf("archive task: %w", err))
 		}
 	} else {
 		if err := os.RemoveAll(taskDir); err != nil {
-			outputError(cmd, useJSON, fmt.Errorf("remove task dir: %w", err))
-			return err
+			return outputError(cmd, useJSON, fmt.Errorf("remove task dir: %w", err))
 		}
 	}
 

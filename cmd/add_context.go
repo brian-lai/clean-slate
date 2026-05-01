@@ -34,20 +34,17 @@ func runAddContext(cmd *cobra.Command, args []string) error {
 
 	if _, err := os.Stat(taskDir); os.IsNotExist(err) {
 		werr := fmt.Errorf("task %q not found at %s", taskName, taskDir)
-		outputError(cmd, useJSON, werr)
-		return werr
+		return outputError(cmd, useJSON, werr)
 	}
 
 	task, err := manifest.Read(taskDir)
 	if err != nil {
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 
 	contextDir := filepath.Join(taskDir, "context")
 	if err := os.MkdirAll(contextDir, 0755); err != nil {
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 
 	// Load the set of source paths already recorded for this task.
@@ -58,8 +55,7 @@ func runAddContext(cmd *cobra.Command, args []string) error {
 	// across invocations.
 	sourceSet, err := readSourceSet(taskDir)
 	if err != nil {
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 
 	// Collect on-disk filenames in context/ for collision-rename
@@ -120,12 +116,10 @@ func runAddContext(cmd *cobra.Command, args []string) error {
 
 	// Re-validate and write
 	if err := manifest.Validate(task); err != nil {
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 	if err := manifest.Write(task, taskDir); err != nil {
-		outputError(cmd, useJSON, err)
-		return err
+		return outputError(cmd, useJSON, err)
 	}
 
 	if useJSON {
