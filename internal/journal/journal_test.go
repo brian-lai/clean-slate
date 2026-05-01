@@ -2,7 +2,9 @@ package journal_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -170,5 +172,94 @@ func TestWriteUsesAtomicIO(t *testing.T) {
 		if strings.Contains(e.Name(), ".tmp-") {
 			t.Errorf("leftover tempfile: %s", e.Name())
 		}
+	}
+}
+
+// deadPID spawns a subprocess, waits for it, and returns its PID. The kernel
+// has reaped the process so that PID is guaranteed dead. Safer than hardcoding
+// a large number because pid_max can be arbitrarily high on modern Linux.
+func deadPID(t *testing.T) int {
+	t.Helper()
+	c := exec.Command("true")
+	if runtime.GOOS == "darwin" {
+		c = exec.Command("/usr/bin/true")
+	}
+	if err := c.Run(); err != nil {
+		t.Fatalf("spawn dead-PID subprocess: %v", err)
+	}
+	return c.Process.Pid
+}
+
+func TestScanOrphansFiltersLiveProcesses(t *testing.T) {
+	tasksDir := t.TempDir()
+	aliveDir := filepath.Join(tasksDir, "alive")
+	deadDir := filepath.Join(tasksDir, "dead")
+	os.MkdirAll(aliveDir, 0755)
+	os.MkdirAll(deadDir, 0755)
+
+	dp := deadPID(t)
+
+	// Sanity: dp must not coincidentally equal os.Getpid().
+	if dp == os.Getpid() {
+		t.Skip("dead PID collided with ourselves; rerun")
+	}
+
+	aliveEntry := makeEntry(os.Getpid(), aliveDir)
+	deadEntry := makeEntry(dp, deadDir)
+
+	if err := journal.Write(aliveDir, aliveEntry); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.Write(deadDir, deadEntry); err != nil {
+		t.Fatal(err)
+	}
+
+	orphans, err := journal.ScanOrphans(tasksDir)
+	if err != nil {
+		t.Fatalf("ScanOrphans: %v", err)
+	}
+
+	if len(orphans) != 1 {
+		t.Fatalf("expected 1 orphan, got %d: %+v", len(orphans), orphans)
+	}
+	if orphans[0].PID != dp {
+		t.Errorf("orphan PID = %d, want %d (dead)", orphans[0].PID, dp)
+	}
+}
+
+func TestScanOrphansIgnoresMissingDirs(t *testing.T) {
+	orphans, err := journal.ScanOrphans(filepath.Join(t.TempDir(), "does-not-exist"))
+	if err != nil {
+		t.Errorf("ScanOrphans on missing dir: want nil error, got %v", err)
+	}
+	if len(orphans) != 0 {
+		t.Errorf("expected empty slice, got %v", orphans)
+	}
+}
+
+func TestScanOrphansMultiplePIDsPerTaskDir(t *testing.T) {
+	tasksDir := t.TempDir()
+	taskDir := filepath.Join(tasksDir, "shared")
+	os.MkdirAll(taskDir, 0755)
+
+	dp := deadPID(t)
+	if dp == os.Getpid() {
+		t.Skip("PID collision; rerun")
+	}
+
+	aliveEntry := makeEntry(os.Getpid(), taskDir)
+	deadEntry := makeEntry(dp, taskDir)
+	journal.Write(taskDir, aliveEntry)
+	journal.Write(taskDir, deadEntry)
+
+	orphans, err := journal.ScanOrphans(tasksDir)
+	if err != nil {
+		t.Fatalf("ScanOrphans: %v", err)
+	}
+	if len(orphans) != 1 {
+		t.Fatalf("expected exactly 1 orphan (dead PID), got %d: %+v", len(orphans), orphans)
+	}
+	if orphans[0].PID != dp {
+		t.Errorf("orphan PID = %d, want %d", orphans[0].PID, dp)
 	}
 }
