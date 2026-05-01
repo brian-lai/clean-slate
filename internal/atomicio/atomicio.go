@@ -43,32 +43,38 @@ func WriteFile(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("atomicio: open tempfile for %s: %w", path, err)
 	}
 
-	cleanup := func() { _ = os.Remove(tmpPath) }
+	// Edit-proof cleanup: a deferred remove runs unless we succeeded.
+	// Any new error branch added between here and `renamed = true` will
+	// still clean up without needing to remember manual cleanup().
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
 	if _, err := f.Write(data); err != nil {
 		_ = f.Close()
-		cleanup()
 		return fmt.Errorf("atomicio: write tempfile for %s: %w", path, err)
 	}
 	if err := f.Sync(); err != nil {
 		_ = f.Close()
-		cleanup()
 		return fmt.Errorf("atomicio: fsync tempfile for %s: %w", path, err)
 	}
 	if err := f.Close(); err != nil {
-		cleanup()
 		return fmt.Errorf("atomicio: close tempfile for %s: %w", path, err)
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
-		cleanup()
 		return fmt.Errorf("atomicio: rename tempfile for %s: %w", path, err)
 	}
+	renamed = true
 
-	// fsync the containing directory so the rename itself is durable. On a
-	// POSIX FS this ensures a subsequent readdir sees `path` and not `tmpPath`.
-	// tmpfs and some network mounts may no-op this; we issue it for the FSes
-	// that honor it and accept the no-op cost on those that don't.
+	// fsync the containing directory so the rename itself is durable on a
+	// POSIX FS. Atomicity is already guaranteed by the rename; this call is
+	// purely for durability over power loss. We intentionally ignore the
+	// error: tmpfs and some network mounts no-op it, and a real EIO here
+	// doesn't invalidate the already-atomic rename.
 	if dirF, err := os.Open(dir); err == nil {
 		_ = dirF.Sync()
 		_ = dirF.Close()

@@ -131,8 +131,15 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		_ = journal.Clear(taskDir, journalEntry.PID)
 	}
 
-	// Seed the journal with the empty operation so a SIGKILL mid-worktree-add
-	// still leaves a recoverable record.
+	// Crash-gap note: between workspace.Create above and this first
+	// journal.Write, a SIGKILL leaves `taskDir/context/` on disk with NO
+	// journal file. Phase 2's ScanOrphans globs `.cs-journal.*` per task dir
+	// and therefore cannot recover such an orphan. The window is microseconds
+	// and Phase 2's per-task lock narrows it further (the orphan is still
+	// discoverable by its lack of task.json when the user runs cs list, but
+	// automatic recovery isn't provided). Accepted for v0.2.0; a future
+	// hardening could write a "staging" journal at <tasksDir>/.cs-staging/
+	// BEFORE workspace.Create to close this gap completely.
 	if err := journal.Write(taskDir, journalEntry); err != nil {
 		rollback()
 		return outputError(cmd, useJSON, err)
